@@ -3,9 +3,20 @@ name: Release
 # Triggers when you click "Publish release" on a GitHub Release.
 # The release's tag (e.g. v0.2.0) becomes the app version, and built
 # artifacts get attached to that same release.
+#
+# Also runnable manually from Actions → Release → Run workflow, useful
+# for smoke-testing the build pipeline without cutting a real release.
+# When run manually, pass the tag of an existing release to upload to;
+# leave blank to build without uploading.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to upload artifacts to (optional — leave blank to just build)'
+        required: false
+        type: string
 
 permissions:
   # Required so the workflow can upload built artifacts back to the release.
@@ -39,11 +50,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Sync package.json version to release tag
-        # If the release tag is "v0.2.0", this sets package.json version to "0.2.0"
-        # so the artifact filenames (pagr-darwin-arm64-0.2.0.zip) match the release.
+      - name: Resolve tag
+        id: tag
+        # On `release: published` the tag comes from the event payload.
+        # On `workflow_dispatch` it comes from the input (may be empty,
+        # in which case we build without a version bump and skip upload).
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG:-<none>}"
+
+      - name: Sync package.json version to tag
+        if: steps.tag.outputs.tag != ''
+        # If the tag is "v0.2.0", this sets package.json version to "0.2.0"
+        # so the artifact filenames (pagr-darwin-arm64-0.2.0.zip) match.
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
           echo "Setting version to $VERSION"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
@@ -93,8 +119,21 @@ jobs:
         run: npm run make -- --arch=${{ matrix.arch }}
 
       - name: Upload artifacts to release
+        # Only upload if we have a tag to attach to. On manual runs with
+        # no tag input, the build artifacts stay in the workflow run only.
+        if: steps.tag.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           files: |
+            out/make/**/*.zip
+            out/make/**/*.dmg
+
+      - name: Upload artifacts as workflow artifact (manual runs without tag)
+        if: steps.tag.outputs.tag == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pagr-${{ matrix.arch }}
+          path: |
             out/make/**/*.zip
             out/make/**/*.dmg
