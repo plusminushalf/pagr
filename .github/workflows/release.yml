@@ -1,0 +1,100 @@
+name: Release
+
+# Triggers when you click "Publish release" on a GitHub Release.
+# The release's tag (e.g. v0.2.0) becomes the app version, and built
+# artifacts get attached to that same release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  # Required so the workflow can upload built artifacts back to the release.
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon — macos-latest is arm64 on current GitHub runners.
+          - os: macos-latest
+            arch: arm64
+          # Intel — pinned to macos-13, the last x64 runner image.
+          - os: macos-13
+            arch: x64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync package.json version to release tag
+        # If the release tag is "v0.2.0", this sets package.json version to "0.2.0"
+        # so the artifact filenames (pagr-darwin-arm64-0.2.0.zip) match the release.
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "Setting version to $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      # ─────────────────────────────────────────────────────────────
+      # Optional: code signing + notarization.
+      #
+      # Without signing, users who download the .app will see a Gatekeeper
+      # warning ("pagr can't be opened because Apple cannot check it for
+      # malicious software"). They can right-click → Open to bypass, but
+      # it's a rough first-run experience.
+      #
+      # To enable:
+      #   1. Join the Apple Developer Program ($99/yr).
+      #   2. Create a "Developer ID Application" certificate, export it as
+      #      a .p12 file, base64-encode it, and save as GitHub secret
+      #      MACOS_CERTIFICATE. Save the .p12 password as MACOS_CERTIFICATE_PWD.
+      #   3. Generate an app-specific password at appleid.apple.com and save
+      #      it as APPLE_APP_SPECIFIC_PASSWORD. Save your Apple ID email as
+      #      APPLE_ID and your Team ID (from the developer portal) as
+      #      APPLE_TEAM_ID.
+      #   4. Uncomment the "Import signing certificate" step below.
+      #   5. Uncomment the env block on the "Build" step below.
+      #   6. Add osxSign + osxNotarize config to packagerConfig in forge.config.ts.
+      # ─────────────────────────────────────────────────────────────
+      #
+      # - name: Import signing certificate
+      #   env:
+      #     MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      #     MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      #   run: |
+      #     echo "$MACOS_CERTIFICATE" | base64 --decode > cert.p12
+      #     security create-keychain -p runner build.keychain
+      #     security default-keychain -s build.keychain
+      #     security unlock-keychain -p runner build.keychain
+      #     security import cert.p12 -k build.keychain \
+      #       -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+      #     security set-key-partition-list -S apple-tool:,apple: \
+      #       -s -k runner build.keychain
+      #     rm cert.p12
+
+      - name: Build
+        # env:
+        #   APPLE_ID: ${{ secrets.APPLE_ID }}
+        #   APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run make -- --arch=${{ matrix.arch }}
+
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/make/**/*.zip
+            out/make/**/*.dmg
