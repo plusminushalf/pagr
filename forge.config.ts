@@ -1,6 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
-import { MakerZIP } from '@electron-forge/maker-zip';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
@@ -14,7 +14,10 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
+    // DMG is a draggable disk-image installer, the standard macOS distribution
+    // format. Only builds on macOS (uses hdiutil), which is fine since the
+    // release workflow runs on macOS runners.
+    new MakerDMG({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),
   ],
