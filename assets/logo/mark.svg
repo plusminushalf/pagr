@@ -1,0 +1,19 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Concept B: "Mark" -->
+  <!-- Geometric lowercase p on a dark squircle. Letter-mark style.
+       Minimalist, brandable. Reads cleanly at Dock sizes. -->
+
+  <!-- Dark squircle background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="#1C1B1A"/>
+
+  <!-- Lowercase "p" -->
+  <!-- Stem: vertical rounded bar. Extends below the baseline (descender). -->
+  <rect x="300" y="280" width="100" height="592" rx="50" fill="#F4EFE4"/>
+
+  <!-- Bowl: thick-stroked circle, welded to the right side of the stem.
+       Bowl top aligns with stem top; descender continues below bowl bottom. -->
+  <circle cx="524" cy="480" r="150"
+          fill="none"
+          stroke="#F4EFE4"
+          stroke-width="100"/>
+</svg>

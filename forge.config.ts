@@ -10,6 +10,10 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Path is given without the extension. Electron Packager automatically
+    // picks assets/logo/icon.icns on macOS, .ico on Windows, .png on Linux.
+    // Regenerate with `npm run build:icon` when mark.svg changes.
+    icon: 'assets/logo/icon',
   },
   rebuildConfig: {},
   makers: [

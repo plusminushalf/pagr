@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo/mark.svg" width="128" height="128" alt="pagr logo" />
+</p>
+
 # pagr
 
 A tiny, opinionated markdown viewer and editor for folders that Claude wrote.

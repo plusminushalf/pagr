@@ -90,3 +90,7 @@ typings/
 
 # Electron-Forge
 out/
+
+# Temporary iconset directory produced by `npm run build:icon`.
+# The resulting icon.icns is committed; the iconset is not.
+assets/logo/icon.iconset/
