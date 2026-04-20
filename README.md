@@ -2,6 +2,8 @@
 
 A tiny, opinionated markdown viewer and editor for folders that Claude wrote.
 
+![pagr showing a diet folder](docs/screenshot.png)
+
 ## Why this exists
 
 Two things Claude Cowork is genuinely good at:
