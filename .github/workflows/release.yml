@@ -124,7 +124,11 @@ jobs:
         # whatever body already exists on the release.
         run: |
           CURRENT_TAG="${{ steps.tag.outputs.tag }}"
-          PREV_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
+          # The release event checks out the tagged commit, so HEAD == CURRENT_TAG.
+          # Use HEAD instead of the tag name to avoid cases where the tag ref
+          # isn't locally resolvable (e.g. when checkout fetches the tag's
+          # commit without materializing the tag object).
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "Previous tag: ${PREV_TAG:-<none>}"
 
           # Install instructions — static content, heredoc quoted so nothing expands.
@@ -153,13 +157,13 @@ jobs:
           # Append commit list since previous tag (or last 50 commits if
           # this is the first tag on the repo).
           if [ -n "$PREV_TAG" ]; then
-            git log "${PREV_TAG}..${CURRENT_TAG}" \
+            git log "${PREV_TAG}..HEAD" \
               --pretty=format:"- %s (%h)" --no-merges >> release-body.md
             echo "" >> release-body.md
             echo "" >> release-body.md
             echo "[Full changelog](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG})" >> release-body.md
           else
-            git log "${CURRENT_TAG}" \
+            git log HEAD \
               --pretty=format:"- %s (%h)" --no-merges -n 50 >> release-body.md
             echo "" >> release-body.md
           fi
