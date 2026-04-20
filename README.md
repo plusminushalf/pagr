@@ -4,6 +4,30 @@ A tiny, opinionated markdown viewer and editor for folders that Claude wrote.
 
 ![pagr showing a diet folder](docs/screenshot.png)
 
+## Install
+
+Builds aren't signed with an Apple Developer certificate yet, so the
+first-run involves one extra step. This is a three-command dance; you
+only need to do it once per install.
+
+1. **Download** the latest `.dmg` from the
+   [Releases page](https://github.com/plusminushalf/pagr/releases).
+2. **Install** by double-clicking the DMG and dragging **pagr** to
+   your Applications folder.
+3. **Strip the macOS quarantine attribute** so Gatekeeper lets the
+   unsigned app launch:
+
+   ```sh
+   xattr -cr /Applications/pagr.app
+   ```
+
+4. **Open** pagr from Applications.
+
+If you skip step 3, macOS will refuse to open the app with
+*"pagr is damaged and can't be opened"*. That's Gatekeeper rejecting an
+unsigned, quarantined app. The `xattr` command removes the download
+quarantine flag; after that, the app launches normally.
+
 ## Why this exists
 
 Two things Claude Cowork is genuinely good at:

@@ -32,6 +32,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so we can diff the current tag against the
+          # previous one to generate a commit-based changelog.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -110,6 +115,58 @@ jobs:
         #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run make -- --arch=arm64
 
+      - name: Generate release notes
+        id: notes
+        if: steps.tag.outputs.tag != ''
+        # Builds a release-body.md file with: (1) install instructions for
+        # unsigned builds, (2) commit-based changelog since the previous tag,
+        # (3) a compare link to GitHub. The upload step appends this to
+        # whatever body already exists on the release.
+        run: |
+          CURRENT_TAG="${{ steps.tag.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || echo "")
+          echo "Previous tag: ${PREV_TAG:-<none>}"
+
+          # Install instructions — static content, heredoc quoted so nothing expands.
+          cat > release-body.md <<'BODY_EOF'
+          ## Install
+
+          1. Download the `.dmg` below.
+          2. Double-click to open and drag **pagr** into your Applications folder.
+          3. Strip the macOS quarantine attribute so Gatekeeper lets the
+             unsigned app launch:
+
+             ```sh
+             xattr -cr /Applications/pagr.app
+             ```
+
+          4. Open **pagr** from Applications.
+
+          Step 3 is needed because the build isn't signed with an Apple
+          Developer certificate. Without it, macOS refuses to open the app
+          with _"pagr is damaged and can't be opened"_.
+
+          ## Changelog
+
+          BODY_EOF
+
+          # Append commit list since previous tag (or last 50 commits if
+          # this is the first tag on the repo).
+          if [ -n "$PREV_TAG" ]; then
+            git log "${PREV_TAG}..${CURRENT_TAG}" \
+              --pretty=format:"- %s (%h)" --no-merges >> release-body.md
+            echo "" >> release-body.md
+            echo "" >> release-body.md
+            echo "[Full changelog](https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${CURRENT_TAG})" >> release-body.md
+          else
+            git log "${CURRENT_TAG}" \
+              --pretty=format:"- %s (%h)" --no-merges -n 50 >> release-body.md
+            echo "" >> release-body.md
+          fi
+
+          echo "----- release-body.md -----"
+          cat release-body.md
+
       - name: Upload artifacts to release
         # Only upload if we have a tag to attach to. On manual runs with
         # no tag input, the build artifacts stay in the workflow run only.
@@ -119,6 +176,10 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           files: |
             out/make/**/*.dmg
+          body_path: release-body.md
+          # Append to whatever body the user wrote when creating the release,
+          # rather than overwriting it.
+          append_body: true
 
       - name: Upload artifacts as workflow artifact (manual runs without tag)
         if: steps.tag.outputs.tag == ''
