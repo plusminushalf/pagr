@@ -7,6 +7,9 @@
   --text-dim: #6b7280;
   --border: #e4e6eb;
   --accent: #2266dd;
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
   color-scheme: light;
 }
 
@@ -23,9 +26,7 @@ body,
 }
 
 body {
-  font-family:
-    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-    Arial, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
@@ -169,11 +170,24 @@ body {
   overflow: auto;
   padding: 16px 32px 80px;
   background: var(--bg);
+  container-type: inline-size;
 }
 
 .editor-host .milkdown {
-  max-width: 780px;
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-title: var(--font-sans);
+  width: 60%;
   margin: 0 auto;
+}
+
+.editor-host .milkdown .ProseMirror {
+  padding: 60px 0;
+}
+
+@container (max-width: 800px) {
+  .editor-host .milkdown {
+    width: 90%;
+  }
 }
 
 .status-bar {
