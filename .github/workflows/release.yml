@@ -137,18 +137,21 @@ jobs:
 
           1. Download the `.dmg` below.
           2. Double-click to open and drag **pagr** into your Applications folder.
-          3. Strip the macOS quarantine attribute so Gatekeeper lets the
-             unsigned app launch:
+          3. The build is ad-hoc signed but not notarized by Apple, so on
+             first launch macOS shows _"pagr cannot be opened because the
+             developer cannot be verified"_. To bypass:
 
-             ```sh
-             xattr -cr /Applications/pagr.app
-             ```
+             - **Right-click** (or Control-click) **pagr** in Applications →
+               **Open** → **Open** in the confirmation dialog.
 
-          4. Open **pagr** from Applications.
+             After the first launch, double-clicking works normally.
 
-          Step 3 is needed because the build isn't signed with an Apple
-          Developer certificate. Without it, macOS refuses to open the app
-          with _"pagr is damaged and can't be opened"_.
+          If you instead see _"pagr is damaged and can't be opened"_ (rare,
+          usually on locked-down managed Macs), run:
+
+          ```sh
+          xattr -cr /Applications/pagr.app
+          ```
 
           ## Changelog
 

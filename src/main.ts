@@ -178,3 +178,76 @@ ipcMain.handle(
   },
 );
 
+export type ContentMatch = {
+  path: string;
+  name: string;
+  line: number;
+  snippet: string;
+};
+
+async function collectMarkdownFiles(dir: string, out: string[]): Promise<void> {
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectMarkdownFiles(full, out);
+    } else if (
+      entry.isFile() &&
+      MD_EXT.has(path.extname(entry.name).toLowerCase())
+    ) {
+      out.push(full);
+    }
+  }
+}
+
+ipcMain.handle(
+  'fs:searchContent',
+  async (_evt, query: string): Promise<ContentMatch[]> => {
+    const q = query.trim().toLowerCase();
+    if (!q || !openFolderRoot) return [];
+    const files: string[] = [];
+    await collectMarkdownFiles(openFolderRoot, files);
+    const results: ContentMatch[] = [];
+    const MAX_RESULTS = 50;
+    for (const file of files) {
+      if (results.length >= MAX_RESULTS) break;
+      let text: string;
+      try {
+        text = await fsp.readFile(file, 'utf-8');
+      } catch {
+        continue;
+      }
+      const lower = text.toLowerCase();
+      const idx = lower.indexOf(q);
+      if (idx === -1) continue;
+      // Determine line number and snippet around the match.
+      const lineStart = text.lastIndexOf('\n', idx - 1) + 1;
+      const lineEndRaw = text.indexOf('\n', idx);
+      const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw;
+      const line = text.slice(0, idx).split('\n').length;
+      const rawSnippet = text.slice(lineStart, lineEnd);
+      const snippet = rawSnippet.length > 160
+        ? (() => {
+            const col = idx - lineStart;
+            const start = Math.max(0, col - 40);
+            const end = Math.min(rawSnippet.length, start + 160);
+            return (start > 0 ? '…' : '') + rawSnippet.slice(start, end);
+          })()
+        : rawSnippet;
+      results.push({
+        path: file,
+        name: path.basename(file),
+        line,
+        snippet,
+      });
+    }
+    return results;
+  },
+);
+

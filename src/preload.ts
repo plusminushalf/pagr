@@ -9,6 +9,13 @@ export type FileNode = {
 
 export type OpenFolderResult = { root: string; tree: FileNode[] } | null;
 
+export type ContentMatch = {
+  path: string;
+  name: string;
+  line: number;
+  snippet: string;
+};
+
 const api = {
   openFolder: (): Promise<OpenFolderResult> =>
     ipcRenderer.invoke('dialog:openFolder'),
@@ -18,6 +25,8 @@ const api = {
     ipcRenderer.invoke('fs:readFile', filePath),
   writeFile: (filePath: string, contents: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:writeFile', filePath, contents),
+  searchContent: (query: string): Promise<ContentMatch[]> =>
+    ipcRenderer.invoke('fs:searchContent', query),
 };
 
 contextBridge.exposeInMainWorld('pagr', api);

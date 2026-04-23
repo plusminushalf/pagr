@@ -50,9 +50,19 @@ const config: ForgeConfig = {
       ],
     }),
     // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
+    // at package time, before code signing the application.
+    //
+    // resetAdHocDarwinSignature: flipping fuses modifies bytes inside the
+    // Electron binary, which breaks the ad-hoc signature that
+    // @electron/packager applies on macOS arm64. Without re-signing,
+    // Gatekeeper treats the app as corrupted and shows "pagr is damaged and
+    // can't be opened" — forcing users to run `xattr -cr`. Re-signing
+    // ad-hoc restores a valid (though untrusted) signature, which
+    // downgrades the first-run block to the standard "unverified developer"
+    // dialog that users can bypass with right-click → Open.
     new FusesPlugin({
       version: FuseVersion.V1,
+      resetAdHocDarwinSignature: true,
       [FuseV1Options.RunAsNode]: false,
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
