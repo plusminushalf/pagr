@@ -257,12 +257,33 @@ body {
   background: transparent;
 }
 
+.tree-nested {
+  position: relative;
+}
+.tree-nested::before {
+  content: '';
+  position: absolute;
+  left: var(--guide-left);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
 .tree-caret {
-  display: inline-block;
-  width: 12px;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+.tree-caret.is-open {
+  transform: rotate(90deg);
 }
 
 .tree-name {
@@ -418,6 +439,13 @@ body {
 
 .editor-host .milkdown .ProseMirror {
   padding: 60px 0;
+}
+
+/* ProseMirror defaults tables to `table-layout: fixed`, which forces equal
+ * column widths. Override to `auto` so columns size to content the way
+ * Obsidian does. */
+.editor-host .milkdown .ProseMirror table {
+  table-layout: auto;
 }
 
 @container (max-width: 800px) {

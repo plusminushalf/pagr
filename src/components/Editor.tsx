@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Crepe } from '@milkdown/crepe';
+import { remarkPluginsCtx } from '@milkdown/kit/core';
+import remarkBreaks from 'remark-breaks';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 
@@ -29,6 +31,15 @@ export function Editor({ initialMarkdown, onChange }: Props) {
     const crepe = new Crepe({
       root: host,
       defaultValue: initialMarkdown,
+    });
+
+    // Treat every `\n` as a hard break (Obsidian-style), rather than the
+    // CommonMark default of collapsing single newlines into spaces.
+    crepe.editor.config((ctx) => {
+      ctx.update(remarkPluginsCtx, (plugins) => [
+        ...plugins,
+        { plugin: remarkBreaks, options: {} },
+      ]);
     });
 
     crepe.on((listener) => {

@@ -9,8 +9,12 @@ type Props = {
 };
 
 export function FileTree({ nodes, activePath, onSelect, depth = 0 }: Props) {
+  const isNested = depth > 0;
+  const style = isNested
+    ? ({ ['--guide-left' as string]: `${(depth - 1) * 12 + 13}px` } as React.CSSProperties)
+    : undefined;
   return (
-    <ul className="tree">
+    <ul className={`tree${isNested ? ' tree-nested' : ''}`} style={style}>
       {nodes.map((node) => (
         <TreeNode
           key={node.path}
@@ -45,7 +49,7 @@ function TreeNode({
           style={{ paddingLeft: depth * 12 + 6 }}
           onClick={() => setOpen((v) => !v)}
         >
-          <span className="tree-caret">{open ? '▾' : '▸'}</span>
+          <span className={`tree-caret ${open ? 'is-open' : ''}`}>›</span>
           <span className="tree-name">{node.name}</span>
         </div>
         {open && node.children && node.children.length > 0 && (
