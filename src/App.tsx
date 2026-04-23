@@ -3,6 +3,16 @@ import type { FileNode } from './types';
 import { FileTree } from './components/FileTree';
 import { Editor } from './components/Editor';
 import { CommandPalette } from './components/CommandPalette';
+import { SettingsPanel } from './components/SettingsPanel';
+import {
+  FONT_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  getFontStack,
+  loadFont,
+  loadTheme,
+  type FontKey,
+  type ThemeKey,
+} from './settings';
 
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 600;
@@ -16,6 +26,9 @@ export function App() {
   const [activeContent, setActiveContent] = useState<string>('');
   const [dirty, setDirty] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [font, setFont] = useState<FontKey>(() => loadFont());
+  const [theme, setTheme] = useState<ThemeKey>(() => loadTheme());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = Number(localStorage.getItem(SIDEBAR_STORAGE_KEY));
     return Number.isFinite(stored) && stored >= SIDEBAR_MIN && stored <= SIDEBAR_MAX
@@ -27,6 +40,16 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(FONT_STORAGE_KEY, font);
+    document.documentElement.style.setProperty('--font-editor', getFontStack(font));
+  }, [font]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -125,6 +148,27 @@ export function App() {
             activePath={activePath}
             onSelect={selectFile}
           />
+        </div>
+        <div className="sidebar-footer">
+          <button
+            type="button"
+            className="sidebar-footer-btn"
+            onClick={() => setSettingsOpen((v) => !v)}
+            aria-haspopup="dialog"
+            aria-expanded={settingsOpen}
+          >
+            <span className="sidebar-footer-icon">⚙</span>
+            Settings
+          </button>
+          {settingsOpen && (
+            <SettingsPanel
+              font={font}
+              theme={theme}
+              onFontChange={setFont}
+              onThemeChange={setTheme}
+              onClose={() => setSettingsOpen(false)}
+            />
+          )}
         </div>
       </aside>
       <div
