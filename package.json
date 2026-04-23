@@ -1,7 +1,7 @@
 {
 	"name": "pagr",
 	"productName": "pagr",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"description": "A lightweight markdown editor with live-preview editing.",
 	"main": ".vite/build/main.js",
 	"private": true,
