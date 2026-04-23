@@ -441,6 +441,13 @@ body {
   padding: 60px 0;
 }
 
+/* ProseMirror defaults tables to `table-layout: fixed`, which forces equal
+ * column widths. Override to `auto` so columns size to content the way
+ * Obsidian does. */
+.editor-host .milkdown .ProseMirror table {
+  table-layout: auto;
+}
+
 @container (max-width: 800px) {
   .editor-host .milkdown {
     width: 90%;
