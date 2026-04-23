@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FileNode } from '../types';
+import { fileKindFromName, type FileNode } from '../types';
 
 type Props = {
   nodes: FileNode[];
@@ -60,17 +60,18 @@ function TreeNode({
     );
   }
 
-  const isMd = /\.(md|markdown|mdx)$/i.test(node.name);
+  const kind = fileKindFromName(node.name);
+  const supported = kind !== 'unsupported';
   const isActive = activePath === node.path;
   return (
     <li className="tree-item tree-file">
       <div
         className={`tree-row ${isActive ? 'is-active' : ''} ${
-          isMd ? '' : 'is-disabled'
+          supported ? '' : 'is-disabled'
         }`}
         style={{ paddingLeft: depth * 12 + 20 }}
-        onClick={() => isMd && onSelect(node)}
-        title={isMd ? node.path : 'Only markdown files are editable'}
+        onClick={() => supported && onSelect(node)}
+        title={supported ? node.path : 'Unsupported file type'}
       >
         <span className="tree-name">{node.name}</span>
       </div>

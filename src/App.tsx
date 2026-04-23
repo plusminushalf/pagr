@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FileNode } from './types';
+import { fileKindFromName, type FileKind, type FileNode } from './types';
 import { FileTree } from './components/FileTree';
 import { Editor } from './components/Editor';
+import { ImageViewer } from './components/ImageViewer';
+import { PdfViewer } from './components/PdfViewer';
 import { CommandPalette } from './components/CommandPalette';
 import { SettingsPanel } from './components/SettingsPanel';
 import {
@@ -23,8 +25,11 @@ export function App() {
   const [root, setRoot] = useState<string | null>(null);
   const [tree, setTree] = useState<FileNode[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
+  const [activeKind, setActiveKind] = useState<FileKind>('unsupported');
   const [activeContent, setActiveContent] = useState<string>('');
   const [dirty, setDirty] = useState(false);
+  // Bumped when a non-text active file changes on disk, to bust viewer caches.
+  const [viewerReloadKey, setViewerReloadKey] = useState(0);
   // External-change state for the currently-open file:
   //   null          — in sync with disk
   //   { content }   — disk changed while we had unsaved edits, waiting for user
@@ -88,6 +93,7 @@ export function App() {
     setRoot(result.root);
     setTree(result.tree);
     setActivePath(null);
+    setActiveKind('unsupported');
     setActiveContent('');
     setDirty(false);
     setExternalChange(null);
@@ -95,14 +101,19 @@ export function App() {
 
   const selectFile = useCallback(async (node: FileNode) => {
     if (node.kind !== 'file') return;
-    const ext = node.name.toLowerCase().split('.').pop() ?? '';
-    if (!['md', 'markdown', 'mdx'].includes(ext)) return;
-    const contents = await window.pagr.readFile(node.path);
+    const kind = fileKindFromName(node.name);
+    if (kind === 'unsupported') return;
+    if (kind === 'markdown') {
+      const contents = await window.pagr.readFile(node.path);
+      setActiveContent(contents);
+      setEditorEpoch((n) => n + 1);
+    } else {
+      setActiveContent('');
+    }
     setActivePath(node.path);
-    setActiveContent(contents);
+    setActiveKind(kind);
     setDirty(false);
     setExternalChange(null);
-    setEditorEpoch((n) => n + 1);
   }, []);
 
   const saveActive = useCallback(
@@ -129,7 +140,7 @@ export function App() {
     setEditorEpoch((n) => n + 1);
   }, []);
 
-  const flatFiles = useMemo(() => flattenMarkdownFiles(tree), [tree]);
+  const flatFiles = useMemo(() => flattenSupportedFiles(tree), [tree]);
 
   // Refs for always-fresh reads inside the single watcher subscription.
   const activePathRef = useRef(activePath);
@@ -146,7 +157,10 @@ export function App() {
       if (!current || evt.path !== current) return;
 
       if (evt.kind === 'change') {
-        if (!dirtyRef.current) {
+        if (evt.content === undefined) {
+          // Binary file (image/pdf) — just reload the viewer.
+          setViewerReloadKey((n) => n + 1);
+        } else if (!dirtyRef.current) {
           // Clean buffer → sync silently.
           reloadFromDisk(evt.content);
         } else {
@@ -241,17 +255,23 @@ export function App() {
       />
       <main className="editor-pane">
         {activePath ? (
-          <Editor
-            key={`${activePath}:${editorEpoch}`}
-            initialMarkdown={activeContent}
-            onChange={(md) => {
-              setActiveContent(md);
-              setDirty(true);
-            }}
-          />
+          activeKind === 'markdown' ? (
+            <Editor
+              key={`${activePath}:${editorEpoch}`}
+              initialMarkdown={activeContent}
+              onChange={(md) => {
+                setActiveContent(md);
+                setDirty(true);
+              }}
+            />
+          ) : activeKind === 'image' ? (
+            <ImageViewer path={activePath} reloadKey={viewerReloadKey} />
+          ) : activeKind === 'pdf' ? (
+            <PdfViewer path={activePath} reloadKey={viewerReloadKey} />
+          ) : null
         ) : (
           <div className="editor-empty">
-            {root ? 'Select a markdown file to edit.' : 'No folder open.'}
+            {root ? 'Select a file to open.' : 'No folder open.'}
           </div>
         )}
         {activePath && (
@@ -259,23 +279,27 @@ export function App() {
             className={`status-bar${externalChange ? ' status-bar--warning' : ''}`}
           >
             <span>{activePath}</span>
-            {externalChange ? (
-              <span className="status-bar-warn">
-                {externalChange === 'deleted'
-                  ? 'File deleted outside pagr — saving will recreate it.'
-                  : 'File changed outside pagr — saving will overwrite.'}
-                {externalChange !== 'deleted' && (
-                  <button
-                    type="button"
-                    className="status-bar-action"
-                    onClick={() => reloadFromDisk(externalChange.content)}
-                  >
-                    Reload
-                  </button>
-                )}
-              </span>
+            {activeKind === 'markdown' ? (
+              externalChange ? (
+                <span className="status-bar-warn">
+                  {externalChange === 'deleted'
+                    ? 'File deleted outside pagr — saving will recreate it.'
+                    : 'File changed outside pagr — saving will overwrite.'}
+                  {externalChange !== 'deleted' && (
+                    <button
+                      type="button"
+                      className="status-bar-action"
+                      onClick={() => reloadFromDisk(externalChange.content)}
+                    >
+                      Reload
+                    </button>
+                  )}
+                </span>
+              ) : (
+                <span>{dirty ? '● unsaved' : 'saved'}</span>
+              )
             ) : (
-              <span>{dirty ? '● unsaved' : 'saved'}</span>
+              <span>{activeKind === 'pdf' ? 'PDF' : 'Image'}</span>
             )}
           </div>
         )}
@@ -294,13 +318,13 @@ export function App() {
   );
 }
 
-function flattenMarkdownFiles(nodes: FileNode[]): FileNode[] {
+function flattenSupportedFiles(nodes: FileNode[]): FileNode[] {
   const out: FileNode[] = [];
   const walk = (list: FileNode[]) => {
     for (const n of list) {
       if (n.kind === 'dir') {
         if (n.children) walk(n.children);
-      } else if (/\.(md|markdown|mdx)$/i.test(n.name)) {
+      } else if (fileKindFromName(n.name) !== 'unsupported') {
         out.push(n);
       }
     }

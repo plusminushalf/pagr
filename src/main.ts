@@ -179,20 +179,29 @@ async function startWatching(folder: string) {
 
   w.on('change', async (p: string) => {
     const abs = path.resolve(p);
-    let content: string;
-    try {
-      content = await fsp.readFile(abs, 'utf-8');
-    } catch {
-      return;
-    }
-    // Swallow self-writes: we just wrote this exact content.
-    const expected = selfWrites.get(abs);
-    if (expected !== undefined && expected === content) return;
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    const ext = path.extname(abs).toLowerCase();
+    // For text we load and diff against self-writes; for binary (images/pdf)
+    // we just notify so the renderer can bust its cache.
+    if (MD_EXT.has(ext)) {
+      let content: string;
+      try {
+        content = await fsp.readFile(abs, 'utf-8');
+      } catch {
+        return;
+      }
+      const expected = selfWrites.get(abs);
+      if (expected !== undefined && expected === content) return;
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        mainWindowRef.webContents.send('fs:externalChange', {
+          path: abs,
+          kind: 'change',
+          content,
+        });
+      }
+    } else if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('fs:externalChange', {
         path: abs,
         kind: 'change',
-        content,
       });
     }
   });
@@ -223,6 +232,8 @@ const IMG_EXT = new Set([
   '.bmp',
 ]);
 
+const PDF_EXT = new Set(['.pdf']);
+
 async function walkDir(dir: string): Promise<FileNode[]> {
   const entries = await fsp.readdir(dir, { withFileTypes: true });
   const nodes: FileNode[] = [];
@@ -234,7 +245,7 @@ async function walkDir(dir: string): Promise<FileNode[]> {
       nodes.push({ name: entry.name, path: full, kind: 'dir', children });
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
-      if (MD_EXT.has(ext) || IMG_EXT.has(ext)) {
+      if (MD_EXT.has(ext) || IMG_EXT.has(ext) || PDF_EXT.has(ext)) {
         nodes.push({ name: entry.name, path: full, kind: 'file' });
       }
     }
@@ -270,6 +281,16 @@ ipcMain.handle('fs:readFile', async (_evt, filePath: string) => {
   const rootResolved = path.resolve(openFolderRoot);
   if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
   return fsp.readFile(resolved, 'utf-8');
+});
+
+ipcMain.handle('fs:readFileBytes', async (_evt, filePath: string) => {
+  if (!openFolderRoot) throw new Error('No folder open');
+  const resolved = path.resolve(filePath);
+  const rootResolved = path.resolve(openFolderRoot);
+  if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
+  const buf = await fsp.readFile(resolved);
+  // IPC clones a Uint8Array cleanly; return a fresh one backed by the buffer.
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 
 ipcMain.handle(

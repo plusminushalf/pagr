@@ -17,7 +17,7 @@ export type ContentMatch = {
 };
 
 export type ExternalChangeEvent =
-  | { path: string; kind: 'change'; content: string }
+  | { path: string; kind: 'change'; content?: string }
   | { path: string; kind: 'add' | 'unlink' | 'addDir' | 'unlinkDir' };
 
 export type TreeChangedEvent = { root: string; tree: FileNode[] };
@@ -29,6 +29,8 @@ const api = {
     ipcRenderer.invoke('fs:listDir', folder),
   readFile: (filePath: string): Promise<string> =>
     ipcRenderer.invoke('fs:readFile', filePath),
+  readFileBytes: (filePath: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke('fs:readFileBytes', filePath),
   writeFile: (filePath: string, contents: string): Promise<boolean> =>
     ipcRenderer.invoke('fs:writeFile', filePath, contents),
   searchContent: (query: string): Promise<ContentMatch[]> =>
