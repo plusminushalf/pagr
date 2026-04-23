@@ -4,19 +4,27 @@ name: Release
 # The release's tag (e.g. v0.2.0) becomes the app version, and built
 # artifacts get attached to that same release.
 #
-# Also runnable manually from Actions → Release → Run workflow, useful
-# for smoke-testing the build pipeline without cutting a real release.
-# When run manually, pass the tag of an existing release to upload to;
-# leave blank to build without uploading.
+# Also runnable manually from Actions → Release → Run workflow. The
+# manual path bumps package.json by the chosen semver level (default
+# patch), commits the bump to main, then builds, tags, and publishes
+# a new GitHub release with the artifacts attached.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Existing release tag to upload artifacts to (optional — leave blank to just build)'
-        required: false
-        type: string
+      bump:
+        description: 'Semver bump'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prepatch
+          - preminor
+          - premajor
 
 permissions:
   # Required so the workflow can upload built artifacts back to the release.
@@ -49,27 +57,46 @@ jobs:
 
       - name: Resolve tag
         id: tag
-        # On `release: published` the tag comes from the event payload.
-        # On `workflow_dispatch` it comes from the input (may be empty,
-        # in which case we build without a version bump and skip upload).
+        # On `release: published` the tag comes from the event payload
+        # and package.json is synced to match. On `workflow_dispatch`
+        # we bump package.json by the chosen semver level, use the new
+        # version as the tag, commit the bump back to main, and let the
+        # release-creation step below tag that commit.
         run: |
           if [ -n "${{ github.event.release.tag_name }}" ]; then
             TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            echo "dispatch=false" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
           else
-            TAG="${{ inputs.tag }}"
+            BUMP="${{ inputs.bump }}"
+            npm version "$BUMP" --no-git-tag-version
+            VERSION=$(node -p "require('./package.json').version")
+            TAG="v$VERSION"
+            echo "dispatch=true" >> "$GITHUB_OUTPUT"
+            case "$BUMP" in
+              pre*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+              *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+            esac
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Resolved tag: ${TAG:-<none>}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: $TAG"
 
-      - name: Sync package.json version to tag
-        if: steps.tag.outputs.tag != ''
-        # If the tag is "v0.2.0", this sets package.json version to "0.2.0"
-        # so the artifact filenames (pagr-0.2.0-arm64.dmg) match.
+      - name: Commit version bump
+        id: bump_commit
+        if: steps.tag.outputs.dispatch == 'true'
+        # Push the bumped package.json / package-lock.json so the main
+        # branch stays in sync with the version we're about to release.
+        # The release-creation step below tags this commit.
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          VERSION="${TAG#v}"
-          echo "Setting version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "Release ${{ steps.tag.outputs.tag }}"
+          git push origin HEAD:${{ github.ref_name }}
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # ─────────────────────────────────────────────────────────────
       # Optional: code signing + notarization.
@@ -117,7 +144,6 @@ jobs:
 
       - name: Generate release notes
         id: notes
-        if: steps.tag.outputs.tag != ''
         # Builds a release-body.md file with: (1) install instructions for
         # unsigned builds, (2) commit-based changelog since the previous tag,
         # (3) a compare link to GitHub. The upload step appends this to
@@ -174,24 +200,19 @@ jobs:
           echo "----- release-body.md -----"
           cat release-body.md
 
-      - name: Upload artifacts to release
-        # Only upload if we have a tag to attach to. On manual runs with
-        # no tag input, the build artifacts stay in the workflow run only.
-        if: steps.tag.outputs.tag != ''
+      - name: Publish release
+        # Creates the release + tag if they don't exist (dispatch path) or
+        # appends artifacts to an existing release (release-published path).
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ steps.bump_commit.outputs.sha || github.sha }}
+          name: ${{ steps.tag.outputs.tag }}
           files: |
             out/make/**/*.dmg
           body_path: release-body.md
           # Append to whatever body the user wrote when creating the release,
-          # rather than overwriting it.
+          # rather than overwriting it. Harmless on dispatch (no prior body).
           append_body: true
-
-      - name: Upload artifacts as workflow artifact (manual runs without tag)
-        if: steps.tag.outputs.tag == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: pagr-arm64
-          path: |
-            out/make/**/*.dmg
+          prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.tag.outputs.prerelease == 'true' && 'false' || 'true' }}
