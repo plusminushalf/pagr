@@ -25,6 +25,15 @@ export function App() {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [activeContent, setActiveContent] = useState<string>('');
   const [dirty, setDirty] = useState(false);
+  // External-change state for the currently-open file:
+  //   null          — in sync with disk
+  //   { content }   — disk changed while we had unsaved edits, waiting for user
+  //   'deleted'     — file was removed/renamed externally
+  const [externalChange, setExternalChange] = useState<
+    { content: string } | 'deleted' | null
+  >(null);
+  // Bump to force-remount the editor (Crepe only reads initialMarkdown on mount).
+  const [editorEpoch, setEditorEpoch] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [font, setFont] = useState<FontKey>(() => loadFont());
@@ -81,6 +90,7 @@ export function App() {
     setActivePath(null);
     setActiveContent('');
     setDirty(false);
+    setExternalChange(null);
   }, []);
 
   const selectFile = useCallback(async (node: FileNode) => {
@@ -91,18 +101,70 @@ export function App() {
     setActivePath(node.path);
     setActiveContent(contents);
     setDirty(false);
+    setExternalChange(null);
+    setEditorEpoch((n) => n + 1);
   }, []);
 
   const saveActive = useCallback(
     async (markdown: string) => {
       if (!activePath) return;
+      if (externalChange) {
+        const msg =
+          externalChange === 'deleted'
+            ? 'This file was deleted or moved outside pagr. Save anyway and recreate it?'
+            : 'This file was changed outside pagr. Overwrite those changes?';
+        if (!window.confirm(msg)) return;
+      }
       await window.pagr.writeFile(activePath, markdown);
       setDirty(false);
+      setExternalChange(null);
     },
-    [activePath],
+    [activePath, externalChange],
   );
 
+  const reloadFromDisk = useCallback((content: string) => {
+    setActiveContent(content);
+    setDirty(false);
+    setExternalChange(null);
+    setEditorEpoch((n) => n + 1);
+  }, []);
+
   const flatFiles = useMemo(() => flattenMarkdownFiles(tree), [tree]);
+
+  // Refs for always-fresh reads inside the single watcher subscription.
+  const activePathRef = useRef(activePath);
+  activePathRef.current = activePath;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+
+  // Subscribe once to external filesystem events. The main process sends:
+  //   fs:externalChange — a file/dir under the watched root changed outside pagr
+  //   fs:treeChanged    — debounced fresh tree after structural changes
+  useEffect(() => {
+    const offChange = window.pagr.onExternalChange((evt) => {
+      const current = activePathRef.current;
+      if (!current || evt.path !== current) return;
+
+      if (evt.kind === 'change') {
+        if (!dirtyRef.current) {
+          // Clean buffer → sync silently.
+          reloadFromDisk(evt.content);
+        } else {
+          // Dirty buffer → warn, keep user's edits.
+          setExternalChange({ content: evt.content });
+        }
+      } else if (evt.kind === 'unlink') {
+        setExternalChange('deleted');
+      }
+    });
+    const offTree = window.pagr.onTreeChanged((evt) => {
+      setTree(evt.tree);
+    });
+    return () => {
+      offChange();
+      offTree();
+    };
+  }, [reloadFromDisk]);
 
   // Keybindings: Cmd/Ctrl+S save, Cmd/Ctrl+K command palette.
   useEffect(() => {
@@ -180,7 +242,7 @@ export function App() {
       <main className="editor-pane">
         {activePath ? (
           <Editor
-            key={activePath}
+            key={`${activePath}:${editorEpoch}`}
             initialMarkdown={activeContent}
             onChange={(md) => {
               setActiveContent(md);
@@ -193,9 +255,28 @@ export function App() {
           </div>
         )}
         {activePath && (
-          <div className="status-bar">
+          <div
+            className={`status-bar${externalChange ? ' status-bar--warning' : ''}`}
+          >
             <span>{activePath}</span>
-            <span>{dirty ? '● unsaved' : 'saved'}</span>
+            {externalChange ? (
+              <span className="status-bar-warn">
+                {externalChange === 'deleted'
+                  ? 'File deleted outside pagr — saving will recreate it.'
+                  : 'File changed outside pagr — saving will overwrite.'}
+                {externalChange !== 'deleted' && (
+                  <button
+                    type="button"
+                    className="status-bar-action"
+                    onClick={() => reloadFromDisk(externalChange.content)}
+                  >
+                    Reload
+                  </button>
+                )}
+              </span>
+            ) : (
+              <span>{dirty ? '● unsaved' : 'saved'}</span>
+            )}
           </div>
         )}
       </main>

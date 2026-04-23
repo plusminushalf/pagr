@@ -4,6 +4,12 @@ import { promises as fsp } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import started from 'electron-squirrel-startup';
 
+// chokidar v5 is ESM-only; main is CJS, so load it dynamically.
+type ChokidarModule = typeof import('chokidar');
+type Watcher = import('chokidar').FSWatcher;
+let chokidarPromise: Promise<ChokidarModule> | null = null;
+const getChokidar = () => (chokidarPromise ??= import('chokidar'));
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
@@ -26,6 +32,14 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 let openFolderRoot: string | null = null;
+let mainWindowRef: BrowserWindow | null = null;
+let watcher: Watcher | null = null;
+
+// Map<absPath, content> — content we just wrote via fs:writeFile. When
+// chokidar fires 'change' for one of these paths, we read the file and
+// compare; if it matches what we wrote, it's a self-write and we swallow it.
+const selfWrites = new Map<string, string>();
+const SELF_WRITE_TTL_MS = 3000;
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -41,6 +55,11 @@ const createWindow = () => {
       sandbox: false,
       nodeIntegration: false,
     },
+  });
+
+  mainWindowRef = mainWindow;
+  mainWindow.on('closed', () => {
+    if (mainWindowRef === mainWindow) mainWindowRef = null;
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -99,6 +118,13 @@ app.on('window-all-closed', () => {
   }
 });
 
+app.on('before-quit', () => {
+  if (watcher) {
+    void watcher.close().catch(() => undefined);
+    watcher = null;
+  }
+});
+
 // ---------- IPC ----------
 
 export type FileNode = {
@@ -109,6 +135,84 @@ export type FileNode = {
 };
 
 const MD_EXT = new Set(['.md', '.markdown', '.mdx']);
+
+let treeRefreshTimer: NodeJS.Timeout | null = null;
+const scheduleTreeRefresh = () => {
+  if (!openFolderRoot || !mainWindowRef) return;
+  if (treeRefreshTimer) clearTimeout(treeRefreshTimer);
+  treeRefreshTimer = setTimeout(async () => {
+    treeRefreshTimer = null;
+    if (!openFolderRoot || !mainWindowRef) return;
+    try {
+      const tree = await walkDir(openFolderRoot);
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        mainWindowRef.webContents.send('fs:treeChanged', {
+          root: openFolderRoot,
+          tree,
+        });
+      }
+    } catch {
+      // Folder may have been removed; swallow — renderer keeps stale tree.
+    }
+  }, 200);
+};
+
+async function startWatching(folder: string) {
+  if (watcher) {
+    await watcher.close().catch(() => undefined);
+    watcher = null;
+  }
+  const { watch } = await getChokidar();
+  const w = watch(folder, {
+    ignoreInitial: true,
+    // Skip dotfiles/dirs to match walkDir's behavior.
+    ignored: (p) => {
+      const base = path.basename(p);
+      return base.startsWith('.') && base !== '.';
+    },
+    awaitWriteFinish: {
+      stabilityThreshold: 150,
+      pollInterval: 50,
+    },
+  });
+  watcher = w;
+
+  w.on('change', async (p: string) => {
+    const abs = path.resolve(p);
+    let content: string;
+    try {
+      content = await fsp.readFile(abs, 'utf-8');
+    } catch {
+      return;
+    }
+    // Swallow self-writes: we just wrote this exact content.
+    const expected = selfWrites.get(abs);
+    if (expected !== undefined && expected === content) return;
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('fs:externalChange', {
+        path: abs,
+        kind: 'change',
+        content,
+      });
+    }
+  });
+
+  const onStructural = (kind: 'add' | 'unlink' | 'addDir' | 'unlinkDir') => (p: string) => {
+    const abs = path.resolve(p);
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('fs:externalChange', {
+        path: abs,
+        kind,
+      });
+    }
+    scheduleTreeRefresh();
+  };
+  w.on('add', onStructural('add'));
+  w.on('unlink', onStructural('unlink'));
+  w.on('addDir', onStructural('addDir'));
+  w.on('unlinkDir', onStructural('unlinkDir'));
+}
+
 const IMG_EXT = new Set([
   '.png',
   '.jpg',
@@ -150,11 +254,13 @@ ipcMain.handle('dialog:openFolder', async () => {
   const folder = result.filePaths[0];
   openFolderRoot = folder;
   const tree = await walkDir(folder);
+  void startWatching(folder);
   return { root: folder, tree };
 });
 
 ipcMain.handle('fs:listDir', async (_evt, folder: string) => {
   openFolderRoot = folder;
+  void startWatching(folder);
   return walkDir(folder);
 });
 
@@ -173,6 +279,10 @@ ipcMain.handle(
     const resolved = path.resolve(filePath);
     const rootResolved = path.resolve(openFolderRoot);
     if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
+    selfWrites.set(resolved, contents);
+    setTimeout(() => {
+      if (selfWrites.get(resolved) === contents) selfWrites.delete(resolved);
+    }, SELF_WRITE_TTL_MS);
     await fsp.writeFile(resolved, contents, 'utf-8');
     return true;
   },

@@ -315,11 +315,13 @@ body {
 
 .status-bar {
   border-top: 1px solid var(--border);
-  padding: 4px 12px;
-  font-size: 11px;
+  padding: 8px 14px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-dim);
   background: var(--bg-sidebar);
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -328,6 +330,39 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status-bar--warning {
+  background: #f59e0b;
+  color: #1c1e21;
+  border-top-color: #b45309;
+}
+
+:root[data-theme='dark'] .status-bar--warning {
+  background: #d97706;
+  color: #1c1e21;
+  border-top-color: #92400e;
+}
+
+.status-bar-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.status-bar-action {
+  background: rgba(28, 30, 33, 0.12);
+  color: inherit;
+  border: 1px solid rgba(28, 30, 33, 0.3);
+  border-radius: 3px;
+  padding: 1px 8px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.status-bar-action:hover {
+  background: rgba(28, 30, 33, 0.22);
 }
 
 /* Command palette */

@@ -16,6 +16,12 @@ export type ContentMatch = {
   snippet: string;
 };
 
+export type ExternalChangeEvent =
+  | { path: string; kind: 'change'; content: string }
+  | { path: string; kind: 'add' | 'unlink' | 'addDir' | 'unlinkDir' };
+
+export type TreeChangedEvent = { root: string; tree: FileNode[] };
+
 const api = {
   openFolder: (): Promise<OpenFolderResult> =>
     ipcRenderer.invoke('dialog:openFolder'),
@@ -27,6 +33,16 @@ const api = {
     ipcRenderer.invoke('fs:writeFile', filePath, contents),
   searchContent: (query: string): Promise<ContentMatch[]> =>
     ipcRenderer.invoke('fs:searchContent', query),
+  onExternalChange: (cb: (evt: ExternalChangeEvent) => void): (() => void) => {
+    const handler = (_e: unknown, evt: ExternalChangeEvent) => cb(evt);
+    ipcRenderer.on('fs:externalChange', handler);
+    return () => ipcRenderer.removeListener('fs:externalChange', handler);
+  },
+  onTreeChanged: (cb: (evt: TreeChangedEvent) => void): (() => void) => {
+    const handler = (_e: unknown, evt: TreeChangedEvent) => cb(evt);
+    ipcRenderer.on('fs:treeChanged', handler);
+    return () => ipcRenderer.removeListener('fs:treeChanged', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('pagr', api);
