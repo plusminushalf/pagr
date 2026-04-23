@@ -288,6 +288,119 @@ body {
   -webkit-app-region: drag;
 }
 
+.welcome {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 32px 48px;
+  -webkit-app-region: drag;
+}
+
+.welcome-inner {
+  max-width: 520px;
+  width: 100%;
+  color: var(--text);
+}
+
+.welcome-title {
+  font-size: 40px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.welcome-subtitle {
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.welcome-subtitle code {
+  font-size: 12.5px;
+  padding: 1px 5px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  color: var(--text);
+}
+
+.welcome-cta {
+  -webkit-app-region: no-drag;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.welcome-cta:hover {
+  filter: brightness(1.08);
+}
+
+.welcome-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.welcome-shortcuts,
+.welcome-tips {
+  margin-top: 32px;
+}
+
+.welcome-shortcuts ul,
+.welcome-tips ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.welcome-shortcuts li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.welcome-shortcuts kbd {
+  -webkit-app-region: no-drag;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  min-width: 56px;
+  text-align: center;
+}
+
+.welcome-tips li {
+  position: relative;
+  padding: 4px 0 4px 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.welcome-tips li::before {
+  content: '·';
+  position: absolute;
+  left: 4px;
+  color: var(--text-dim);
+}
+
 .editor-host {
   flex: 1;
   overflow: auto;

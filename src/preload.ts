@@ -25,6 +25,10 @@ export type TreeChangedEvent = { root: string; tree: FileNode[] };
 const api = {
   openFolder: (): Promise<OpenFolderResult> =>
     ipcRenderer.invoke('dialog:openFolder'),
+  openFolderInNewWindow: (): Promise<boolean> =>
+    ipcRenderer.invoke('dialog:openFolderInNewWindow'),
+  takeInitialFolder: (): Promise<OpenFolderResult> =>
+    ipcRenderer.invoke('window:takeInitialFolder'),
   listDir: (folder: string): Promise<FileNode[]> =>
     ipcRenderer.invoke('fs:listDir', folder),
   readFile: (filePath: string): Promise<string> =>

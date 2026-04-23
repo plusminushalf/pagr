@@ -33,6 +33,8 @@ export type TreeChangedEvent = { root: string; tree: FileNode[] };
 
 export interface PagrApi {
   openFolder(): Promise<OpenFolderResult>;
+  openFolderInNewWindow(): Promise<boolean>;
+  takeInitialFolder(): Promise<OpenFolderResult>;
   listDir(folder: string): Promise<FileNode[]>;
   readFile(filePath: string): Promise<string>;
   readFileBytes(filePath: string): Promise<Uint8Array>;

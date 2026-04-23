@@ -6,6 +6,7 @@ import { ImageViewer } from './components/ImageViewer';
 import { PdfViewer } from './components/PdfViewer';
 import { CommandPalette } from './components/CommandPalette';
 import { SettingsPanel } from './components/SettingsPanel';
+import { Welcome } from './components/Welcome';
 import {
   FONT_STORAGE_KEY,
   THEME_STORAGE_KEY,
@@ -87,17 +88,36 @@ export function App() {
     window.addEventListener('mouseup', onUp);
   }, []);
 
+  const applyFolderResult = useCallback(
+    (result: { root: string; tree: FileNode[] }) => {
+      setRoot(result.root);
+      setTree(result.tree);
+      setActivePath(null);
+      setActiveKind('unsupported');
+      setActiveContent('');
+      setDirty(false);
+      setExternalChange(null);
+    },
+    [],
+  );
+
   const openFolder = useCallback(async () => {
     const result = await window.pagr.openFolder();
     if (!result) return;
-    setRoot(result.root);
-    setTree(result.tree);
-    setActivePath(null);
-    setActiveKind('unsupported');
-    setActiveContent('');
-    setDirty(false);
-    setExternalChange(null);
+    applyFolderResult(result);
+  }, [applyFolderResult]);
+
+  const openFolderInNewWindow = useCallback(async () => {
+    await window.pagr.openFolderInNewWindow();
   }, []);
+
+  // If this window was spawned with a pre-selected folder (via Cmd+O from
+  // another window), load it once on mount.
+  useEffect(() => {
+    void window.pagr.takeInitialFolder().then((result) => {
+      if (result) applyFolderResult(result);
+    });
+  }, [applyFolderResult]);
 
   const selectFile = useCallback(async (node: FileNode) => {
     if (node.kind !== 'file') return;
@@ -180,7 +200,8 @@ export function App() {
     };
   }, [reloadFromDisk]);
 
-  // Keybindings: Cmd/Ctrl+S save, Cmd/Ctrl+K command palette.
+  // Keybindings: Cmd/Ctrl+S save, Cmd/Ctrl+K command palette,
+  // Cmd/Ctrl+O open a folder in a new window.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -191,11 +212,24 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      } else if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === 'o'
+      ) {
+        e.preventDefault();
+        // If this window is empty, reuse it; otherwise spawn a new window.
+        if (root) {
+          void openFolderInNewWindow();
+        } else {
+          void openFolder();
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [activePath, dirty, activeContent, saveActive]);
+  }, [activePath, dirty, activeContent, saveActive, openFolderInNewWindow, openFolder, root]);
 
   return (
     <div
@@ -269,10 +303,10 @@ export function App() {
           ) : activeKind === 'pdf' ? (
             <PdfViewer path={activePath} reloadKey={viewerReloadKey} />
           ) : null
+        ) : root ? (
+          <div className="editor-empty">Select a file to open.</div>
         ) : (
-          <div className="editor-empty">
-            {root ? 'Select a file to open.' : 'No folder open.'}
-          </div>
+          <Welcome onOpenFolder={openFolder} />
         )}
         {activePath && (
           <div

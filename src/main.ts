@@ -17,7 +17,7 @@ if (started) {
 
 // Register `safe-file://` as a privileged, standard scheme. The renderer can
 // reference local images inside an opened folder via `safe-file:///abs/path`,
-// and we gate access to paths under the currently open folder only.
+// and we gate access to paths under any folder the user has opened this session.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'safe-file',
@@ -31,9 +31,23 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-let openFolderRoot: string | null = null;
-let mainWindowRef: BrowserWindow | null = null;
-let watcher: Watcher | null = null;
+// Per-window state. Multiple windows can be open, each tracking its own folder,
+// watcher, and tree-refresh timer. Keyed by webContents.id.
+type WindowState = {
+  window: BrowserWindow;
+  openFolderRoot: string | null;
+  watcher: Watcher | null;
+  treeRefreshTimer: NodeJS.Timeout | null;
+  // Folder to load on first renderer mount; the renderer pulls it via
+  // `window:takeInitialFolder` once it's ready.
+  pendingInitialFolder: string | null;
+};
+const windowStates = new Map<number, WindowState>();
+
+// Every folder the user has opened this session. `safe-file://` requests are
+// allowed if the requested path sits under any of these. The handler can't
+// see the requesting webContents, so we authorize by union rather than per-window.
+const allowedRoots = new Set<string>();
 
 // Map<absPath, content> — content we just wrote via fs:writeFile. When
 // chokidar fires 'change' for one of these paths, we read the file and
@@ -41,7 +55,11 @@ let watcher: Watcher | null = null;
 const selfWrites = new Map<string, string>();
 const SELF_WRITE_TTL_MS = 3000;
 
-const createWindow = () => {
+function getState(event: Electron.IpcMainInvokeEvent): WindowState | null {
+  return windowStates.get(event.sender.id) ?? null;
+}
+
+const createWindow = (initialFolder?: string) => {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -57,9 +75,19 @@ const createWindow = () => {
     },
   });
 
-  mainWindowRef = mainWindow;
+  const state: WindowState = {
+    window: mainWindow,
+    openFolderRoot: null,
+    watcher: null,
+    treeRefreshTimer: null,
+    pendingInitialFolder: initialFolder ?? null,
+  };
+  windowStates.set(mainWindow.webContents.id, state);
+
   mainWindow.on('closed', () => {
-    if (mainWindowRef === mainWindow) mainWindowRef = null;
+    if (state.watcher) void state.watcher.close().catch(() => undefined);
+    if (state.treeRefreshTimer) clearTimeout(state.treeRefreshTimer);
+    windowStates.delete(mainWindow.webContents.id);
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -73,11 +101,13 @@ const createWindow = () => {
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+
+  return mainWindow;
 };
 
 app.whenReady().then(() => {
   // Resolve `safe-file://` requests to an absolute file path, but only if the
-  // requested path is inside the currently open folder.
+  // requested path is inside one of the folders the user has opened.
   protocol.handle('safe-file', async (request) => {
     try {
       const url = new URL(request.url);
@@ -88,17 +118,19 @@ app.whenReady().then(() => {
       if (process.platform === 'win32' && /^\/[A-Za-z]:/.test(absPath)) {
         absPath = absPath.slice(1);
       }
-      if (!openFolderRoot) {
-        return new Response('No folder open', { status: 403 });
-      }
       const resolved = path.resolve(absPath);
-      const rootResolved = path.resolve(openFolderRoot);
-      if (
-        resolved !== rootResolved &&
-        !resolved.startsWith(rootResolved + path.sep)
-      ) {
-        return new Response('Forbidden', { status: 403 });
+      let ok = false;
+      for (const root of allowedRoots) {
+        const rootResolved = path.resolve(root);
+        if (
+          resolved === rootResolved ||
+          resolved.startsWith(rootResolved + path.sep)
+        ) {
+          ok = true;
+          break;
+        }
       }
+      if (!ok) return new Response('Forbidden', { status: 403 });
       return net.fetch(pathToFileURL(resolved).toString());
     } catch (err) {
       return new Response(`Error: ${(err as Error).message}`, { status: 500 });
@@ -119,10 +151,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  if (watcher) {
-    void watcher.close().catch(() => undefined);
-    watcher = null;
+  for (const state of windowStates.values()) {
+    if (state.watcher) void state.watcher.close().catch(() => undefined);
+    if (state.treeRefreshTimer) clearTimeout(state.treeRefreshTimer);
   }
+  windowStates.clear();
 });
 
 // ---------- IPC ----------
@@ -136,18 +169,17 @@ export type FileNode = {
 
 const MD_EXT = new Set(['.md', '.markdown', '.mdx']);
 
-let treeRefreshTimer: NodeJS.Timeout | null = null;
-const scheduleTreeRefresh = () => {
-  if (!openFolderRoot || !mainWindowRef) return;
-  if (treeRefreshTimer) clearTimeout(treeRefreshTimer);
-  treeRefreshTimer = setTimeout(async () => {
-    treeRefreshTimer = null;
-    if (!openFolderRoot || !mainWindowRef) return;
+const scheduleTreeRefresh = (state: WindowState) => {
+  if (!state.openFolderRoot) return;
+  if (state.treeRefreshTimer) clearTimeout(state.treeRefreshTimer);
+  state.treeRefreshTimer = setTimeout(async () => {
+    state.treeRefreshTimer = null;
+    if (!state.openFolderRoot) return;
     try {
-      const tree = await walkDir(openFolderRoot);
-      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-        mainWindowRef.webContents.send('fs:treeChanged', {
-          root: openFolderRoot,
+      const tree = await walkDir(state.openFolderRoot);
+      if (!state.window.isDestroyed()) {
+        state.window.webContents.send('fs:treeChanged', {
+          root: state.openFolderRoot,
           tree,
         });
       }
@@ -157,10 +189,10 @@ const scheduleTreeRefresh = () => {
   }, 200);
 };
 
-async function startWatching(folder: string) {
-  if (watcher) {
-    await watcher.close().catch(() => undefined);
-    watcher = null;
+async function startWatching(state: WindowState, folder: string) {
+  if (state.watcher) {
+    await state.watcher.close().catch(() => undefined);
+    state.watcher = null;
   }
   const { watch } = await getChokidar();
   const w = watch(folder, {
@@ -175,7 +207,7 @@ async function startWatching(folder: string) {
       pollInterval: 50,
     },
   });
-  watcher = w;
+  state.watcher = w;
 
   w.on('change', async (p: string) => {
     const abs = path.resolve(p);
@@ -191,15 +223,15 @@ async function startWatching(folder: string) {
       }
       const expected = selfWrites.get(abs);
       if (expected !== undefined && expected === content) return;
-      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-        mainWindowRef.webContents.send('fs:externalChange', {
+      if (!state.window.isDestroyed()) {
+        state.window.webContents.send('fs:externalChange', {
           path: abs,
           kind: 'change',
           content,
         });
       }
-    } else if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('fs:externalChange', {
+    } else if (!state.window.isDestroyed()) {
+      state.window.webContents.send('fs:externalChange', {
         path: abs,
         kind: 'change',
       });
@@ -208,13 +240,13 @@ async function startWatching(folder: string) {
 
   const onStructural = (kind: 'add' | 'unlink' | 'addDir' | 'unlinkDir') => (p: string) => {
     const abs = path.resolve(p);
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('fs:externalChange', {
+    if (!state.window.isDestroyed()) {
+      state.window.webContents.send('fs:externalChange', {
         path: abs,
         kind,
       });
     }
-    scheduleTreeRefresh();
+    scheduleTreeRefresh(state);
   };
   w.on('add', onStructural('add'));
   w.on('unlink', onStructural('unlink'));
@@ -257,36 +289,71 @@ async function walkDir(dir: string): Promise<FileNode[]> {
   return nodes;
 }
 
-ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog({
+ipcMain.handle('dialog:openFolder', async (evt) => {
+  const state = getState(evt);
+  if (!state) return null;
+  const result = await dialog.showOpenDialog(state.window, {
     properties: ['openDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   const folder = result.filePaths[0];
-  openFolderRoot = folder;
+  state.openFolderRoot = folder;
+  allowedRoots.add(folder);
   const tree = await walkDir(folder);
-  void startWatching(folder);
+  void startWatching(state, folder);
   return { root: folder, tree };
 });
 
-ipcMain.handle('fs:listDir', async (_evt, folder: string) => {
-  openFolderRoot = folder;
-  void startWatching(folder);
+ipcMain.handle('dialog:openFolderInNewWindow', async (evt) => {
+  const state = getState(evt);
+  const result = state
+    ? await dialog.showOpenDialog(state.window, {
+        properties: ['openDirectory'],
+      })
+    : await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (result.canceled || result.filePaths.length === 0) return false;
+  const folder = result.filePaths[0];
+  allowedRoots.add(folder);
+  createWindow(folder);
+  return true;
+});
+
+ipcMain.handle('window:takeInitialFolder', async (evt) => {
+  const state = getState(evt);
+  if (!state) return null;
+  const folder = state.pendingInitialFolder;
+  state.pendingInitialFolder = null;
+  if (!folder) return null;
+  state.openFolderRoot = folder;
+  allowedRoots.add(folder);
+  const tree = await walkDir(folder);
+  void startWatching(state, folder);
+  return { root: folder, tree };
+});
+
+ipcMain.handle('fs:listDir', async (evt, folder: string) => {
+  const state = getState(evt);
+  if (!state) throw new Error('No window state');
+  state.openFolderRoot = folder;
+  allowedRoots.add(folder);
+  void startWatching(state, folder);
   return walkDir(folder);
 });
 
-ipcMain.handle('fs:readFile', async (_evt, filePath: string) => {
-  if (!openFolderRoot) throw new Error('No folder open');
+ipcMain.handle('fs:readFile', async (evt, filePath: string) => {
+  const state = getState(evt);
+  if (!state?.openFolderRoot) throw new Error('No folder open');
   const resolved = path.resolve(filePath);
-  const rootResolved = path.resolve(openFolderRoot);
+  const rootResolved = path.resolve(state.openFolderRoot);
   if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
   return fsp.readFile(resolved, 'utf-8');
 });
 
-ipcMain.handle('fs:readFileBytes', async (_evt, filePath: string) => {
-  if (!openFolderRoot) throw new Error('No folder open');
+ipcMain.handle('fs:readFileBytes', async (evt, filePath: string) => {
+  const state = getState(evt);
+  if (!state?.openFolderRoot) throw new Error('No folder open');
   const resolved = path.resolve(filePath);
-  const rootResolved = path.resolve(openFolderRoot);
+  const rootResolved = path.resolve(state.openFolderRoot);
   if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
   const buf = await fsp.readFile(resolved);
   // IPC clones a Uint8Array cleanly; return a fresh one backed by the buffer.
@@ -295,10 +362,11 @@ ipcMain.handle('fs:readFileBytes', async (_evt, filePath: string) => {
 
 ipcMain.handle(
   'fs:writeFile',
-  async (_evt, filePath: string, contents: string) => {
-    if (!openFolderRoot) throw new Error('No folder open');
+  async (evt, filePath: string, contents: string) => {
+    const state = getState(evt);
+    if (!state?.openFolderRoot) throw new Error('No folder open');
     const resolved = path.resolve(filePath);
-    const rootResolved = path.resolve(openFolderRoot);
+    const rootResolved = path.resolve(state.openFolderRoot);
     if (!resolved.startsWith(rootResolved)) throw new Error('Forbidden');
     selfWrites.set(resolved, contents);
     setTimeout(() => {
@@ -339,11 +407,12 @@ async function collectMarkdownFiles(dir: string, out: string[]): Promise<void> {
 
 ipcMain.handle(
   'fs:searchContent',
-  async (_evt, query: string): Promise<ContentMatch[]> => {
+  async (evt, query: string): Promise<ContentMatch[]> => {
+    const state = getState(evt);
     const q = query.trim().toLowerCase();
-    if (!q || !openFolderRoot) return [];
+    if (!q || !state?.openFolderRoot) return [];
     const files: string[] = [];
-    await collectMarkdownFiles(openFolderRoot, files);
+    await collectMarkdownFiles(state.openFolderRoot, files);
     const results: ContentMatch[] = [];
     const MAX_RESULTS = 50;
     for (const file of files) {
@@ -381,4 +450,3 @@ ipcMain.handle(
     return results;
   },
 );
-
