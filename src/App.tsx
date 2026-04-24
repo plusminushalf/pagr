@@ -68,7 +68,9 @@ export function App() {
 
   useEffect(() => {
     localStorage.setItem(FONT_STORAGE_KEY, font);
-    document.documentElement.style.setProperty('--font-editor', getFontStack(font));
+    const stack = getFontStack(font);
+    document.documentElement.style.setProperty('--font-sans', stack);
+    document.documentElement.style.setProperty('--font-editor', stack);
   }, [font]);
 
   useEffect(() => {
