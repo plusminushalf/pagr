@@ -21,6 +21,7 @@ const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 600;
 const SIDEBAR_DEFAULT = 260;
 const SIDEBAR_STORAGE_KEY = 'pagr:sidebarWidth';
+const SIDEBAR_HIDDEN_STORAGE_KEY = 'pagr:sidebarHidden';
 
 export function App() {
   const [root, setRoot] = useState<string | null>(null);
@@ -50,11 +51,18 @@ export function App() {
       ? stored
       : SIDEBAR_DEFAULT;
   });
+  const [sidebarHidden, setSidebarHidden] = useState<boolean>(
+    () => localStorage.getItem(SIDEBAR_HIDDEN_STORAGE_KEY) === '1',
+  );
   const resizingRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_HIDDEN_STORAGE_KEY, sidebarHidden ? '1' : '0');
+  }, [sidebarHidden]);
 
   useEffect(() => {
     localStorage.setItem(FONT_STORAGE_KEY, font);
@@ -212,6 +220,9 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSidebarHidden((v) => !v);
       } else if (
         (e.metaKey || e.ctrlKey) &&
         !e.shiftKey &&
@@ -234,7 +245,11 @@ export function App() {
   return (
     <div
       className="app"
-      style={{ gridTemplateColumns: `${sidebarWidth}px 4px 1fr` }}
+      style={{
+        gridTemplateColumns: sidebarHidden
+          ? '0px 0px 1fr'
+          : `${sidebarWidth}px 4px 1fr`,
+      }}
     >
       <aside className="sidebar">
         <div className="sidebar-header">
@@ -283,9 +298,11 @@ export function App() {
       </aside>
       <div
         className="sidebar-resizer"
-        onMouseDown={onResizeStart}
+        onMouseDown={sidebarHidden ? undefined : onResizeStart}
         role="separator"
         aria-orientation="vertical"
+        aria-hidden={sidebarHidden || undefined}
+        style={sidebarHidden ? { pointerEvents: 'none' } : undefined}
       />
       <main className="editor-pane">
         {activePath ? (
