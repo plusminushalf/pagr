@@ -72,6 +72,10 @@ type WindowState = {
   // Folder to load on first renderer mount; the renderer pulls it via
   // `window:takeInitialFolder` once it's ready.
   pendingInitialFolder: string | null;
+  // When set, the window is in single-file mode: the sidebar tree contains
+  // only this file, and structural events under the parent folder must not
+  // replace the tree with folder contents.
+  singleFilePath: string | null;
 };
 const windowStates = new Map<number, WindowState>();
 
@@ -112,6 +116,7 @@ const createWindow = (initialFolder?: string) => {
     watcher: null,
     treeRefreshTimer: null,
     pendingInitialFolder: initialFolder ?? null,
+    singleFilePath: null,
   };
   const webContentsId = mainWindow.webContents.id;
   windowStates.set(webContentsId, state);
@@ -321,6 +326,10 @@ const MD_EXT = new Set(['.md', '.markdown', '.mdx']);
 
 const scheduleTreeRefresh = (state: WindowState) => {
   if (!state.openFolderRoot) return;
+  // In single-file mode the sidebar only ever shows the opened file, so skip
+  // folder-wide refreshes — structural events under the parent folder don't
+  // belong in the tree.
+  if (state.singleFilePath) return;
   if (state.treeRefreshTimer) clearTimeout(state.treeRefreshTimer);
   state.treeRefreshTimer = setTimeout(async () => {
     state.treeRefreshTimer = null;
@@ -448,15 +457,17 @@ ipcMain.handle('dialog:openFolder', async (evt) => {
   if (result.canceled || result.filePaths.length === 0) return null;
   const folder = result.filePaths[0];
   state.openFolderRoot = folder;
+  state.singleFilePath = null;
   allowedRoots.add(folder);
   const tree = await walkDir(folder);
   void startWatching(state, folder);
   return { root: folder, tree };
 });
 
-// Open a single supported file. Uses its parent directory as the folder root
-// so the rest of the app (tree, watcher, safe-file://) works unchanged, and
-// returns the absolute path so the renderer can auto-select it.
+// Open a single supported file. Sets the parent directory as the permission
+// root (so `safe-file://` images next to the file still resolve, and read/write
+// IPC path checks pass) but the sidebar tree contains only this file — no
+// sibling discovery. The watcher follows just this path.
 ipcMain.handle('dialog:openFile', async (evt) => {
   const state = getState(evt);
   const opts: Electron.OpenDialogOptions = {
@@ -480,15 +491,15 @@ ipcMain.handle('dialog:openFile', async (evt) => {
   const folder = path.dirname(filePath);
   allowedRoots.add(folder);
   if (!state) {
-    // No bound window (shouldn't happen from a menu click on a focused window,
-    // but guard anyway): open a new window positioned at that folder and let
-    // the renderer auto-select once loaded via pendingInitialFolder.
     createWindow(folder);
     return null;
   }
   state.openFolderRoot = folder;
-  const tree = await walkDir(folder);
-  void startWatching(state, folder);
+  state.singleFilePath = filePath;
+  const tree: FileNode[] = [
+    { name: path.basename(filePath), path: filePath, kind: 'file' },
+  ];
+  void startWatching(state, filePath);
   return { root: folder, tree, filePath };
 });
 
@@ -513,6 +524,7 @@ ipcMain.handle('window:takeInitialFolder', async (evt) => {
   state.pendingInitialFolder = null;
   if (!folder) return null;
   state.openFolderRoot = folder;
+  state.singleFilePath = null;
   allowedRoots.add(folder);
   const tree = await walkDir(folder);
   void startWatching(state, folder);
@@ -523,6 +535,7 @@ ipcMain.handle('fs:listDir', async (evt, folder: string) => {
   const state = getState(evt);
   if (!state) throw new Error('No window state');
   state.openFolderRoot = folder;
+  state.singleFilePath = null;
   allowedRoots.add(folder);
   void startWatching(state, folder);
   return walkDir(folder);
