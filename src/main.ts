@@ -259,7 +259,7 @@ function buildAppMenu(): Menu {
       submenu: [
         {
           label: 'Keyboard Shortcuts',
-          accelerator: 'CmdOrCtrl+?',
+          accelerator: 'CmdOrCtrl+/',
           click: () => sendToFocused('menu:showShortcuts'),
         },
       ],

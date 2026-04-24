@@ -233,7 +233,7 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setSidebarHidden((v) => !v);
-      } else if ((e.metaKey || e.ctrlKey) && e.key === '?') {
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === '?' || e.key === '/')) {
         e.preventDefault();
         setHelpOpen((v) => !v);
       } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
