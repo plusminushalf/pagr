@@ -6,6 +6,7 @@ import { ImageViewer } from './components/ImageViewer';
 import { PdfViewer } from './components/PdfViewer';
 import { CommandPalette } from './components/CommandPalette';
 import { SettingsPanel } from './components/SettingsPanel';
+import { ShortcutsHelp } from './components/ShortcutsHelp';
 import { Welcome } from './components/Welcome';
 import {
   FONT_STORAGE_KEY,
@@ -43,6 +44,7 @@ export function App() {
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [font, setFont] = useState<FontKey>(() => loadFont());
   const [theme, setTheme] = useState<ThemeKey>(() => loadTheme());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -119,14 +121,6 @@ export function App() {
     await window.pagr.openFolderInNewWindow();
   }, []);
 
-  // If this window was spawned with a pre-selected folder (via Cmd+O from
-  // another window), load it once on mount.
-  useEffect(() => {
-    void window.pagr.takeInitialFolder().then((result) => {
-      if (result) applyFolderResult(result);
-    });
-  }, [applyFolderResult]);
-
   const selectFile = useCallback(async (node: FileNode) => {
     if (node.kind !== 'file') return;
     const kind = fileKindFromName(node.name);
@@ -143,6 +137,22 @@ export function App() {
     setDirty(false);
     setExternalChange(null);
   }, []);
+
+  const openFile = useCallback(async () => {
+    const result = await window.pagr.openFile();
+    if (!result) return;
+    applyFolderResult({ root: result.root, tree: result.tree });
+    const name = result.filePath.split('/').pop() ?? result.filePath;
+    await selectFile({ name, path: result.filePath, kind: 'file' });
+  }, [applyFolderResult, selectFile]);
+
+  // If this window was spawned with a pre-selected folder (via Cmd+O from
+  // another window), load it once on mount.
+  useEffect(() => {
+    void window.pagr.takeInitialFolder().then((result) => {
+      if (result) applyFolderResult(result);
+    });
+  }, [applyFolderResult]);
 
   const saveActive = useCallback(
     async (markdown: string) => {
@@ -223,6 +233,9 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setSidebarHidden((v) => !v);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '?') {
+        e.preventDefault();
+        setHelpOpen((v) => !v);
       } else if (
         (e.metaKey || e.ctrlKey) &&
         !e.shiftKey &&
@@ -241,6 +254,28 @@ export function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [activePath, dirty, activeContent, saveActive, openFolderInNewWindow, openFolder, root]);
+
+  // Subscribe to menu commands from the main process.
+  useEffect(() => {
+    const offs = [
+      window.pagr.onMenuOpenFolder(() => {
+        if (root) void openFolderInNewWindow();
+        else void openFolder();
+      }),
+      window.pagr.onMenuOpenFile(() => {
+        void openFile();
+      }),
+      window.pagr.onMenuToggleSidebar(() => {
+        setSidebarHidden((v) => !v);
+      }),
+      window.pagr.onMenuShowShortcuts(() => {
+        setHelpOpen((v) => !v);
+      }),
+    ];
+    return () => {
+      for (const off of offs) off();
+    };
+  }, [openFolder, openFolderInNewWindow, openFile, root]);
 
   return (
     <div
@@ -365,6 +400,7 @@ export function App() {
           onClose={() => setPaletteOpen(false)}
         />
       )}
+      {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

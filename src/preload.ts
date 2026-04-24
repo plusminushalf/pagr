@@ -9,6 +9,10 @@ export type FileNode = {
 
 export type OpenFolderResult = { root: string; tree: FileNode[] } | null;
 
+export type OpenFileResult =
+  | { root: string; tree: FileNode[]; filePath: string }
+  | null;
+
 export type ContentMatch = {
   path: string;
   name: string;
@@ -22,11 +26,23 @@ export type ExternalChangeEvent =
 
 export type TreeChangedEvent = { root: string; tree: FileNode[] };
 
+const onMenu = (channel: string, cb: () => void): (() => void) => {
+  const handler = () => cb();
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+};
+
 const api = {
   openFolder: (): Promise<OpenFolderResult> =>
     ipcRenderer.invoke('dialog:openFolder'),
+  openFile: (): Promise<OpenFileResult> =>
+    ipcRenderer.invoke('dialog:openFile'),
   openFolderInNewWindow: (): Promise<boolean> =>
     ipcRenderer.invoke('dialog:openFolderInNewWindow'),
+  onMenuOpenFolder: (cb: () => void) => onMenu('menu:openFolder', cb),
+  onMenuOpenFile: (cb: () => void) => onMenu('menu:openFile', cb),
+  onMenuToggleSidebar: (cb: () => void) => onMenu('menu:toggleSidebar', cb),
+  onMenuShowShortcuts: (cb: () => void) => onMenu('menu:showShortcuts', cb),
   takeInitialFolder: (): Promise<OpenFolderResult> =>
     ipcRenderer.invoke('window:takeInitialFolder'),
   listDir: (folder: string): Promise<FileNode[]> =>

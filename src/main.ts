@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, net } from 'electron';
 import path from 'node:path';
 import { promises as fsp, statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -173,7 +173,82 @@ app.on('open-file', (event, filePath) => {
   createWindow(resolved);
 });
 
+function sendToFocused(channel: string) {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win && !win.isDestroyed()) win.webContents.send(channel);
+}
+
+function buildAppMenu(): Menu {
+  const isMac = process.platform === 'darwin';
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Folder…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => sendToFocused('menu:openFolder'),
+        },
+        {
+          label: 'Open File…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => sendToFocused('menu:openFile'),
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => sendToFocused('menu:toggleSidebar'),
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Keyboard Shortcuts',
+          accelerator: 'CmdOrCtrl+?',
+          click: () => sendToFocused('menu:showShortcuts'),
+        },
+      ],
+    },
+  ];
+  return Menu.buildFromTemplate(template);
+}
+
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(buildAppMenu());
   // Resolve `safe-file://` requests to an absolute file path, but only if the
   // requested path is inside one of the folders the user has opened.
   protocol.handle('safe-file', async (request) => {
@@ -377,6 +452,44 @@ ipcMain.handle('dialog:openFolder', async (evt) => {
   const tree = await walkDir(folder);
   void startWatching(state, folder);
   return { root: folder, tree };
+});
+
+// Open a single supported file. Uses its parent directory as the folder root
+// so the rest of the app (tree, watcher, safe-file://) works unchanged, and
+// returns the absolute path so the renderer can auto-select it.
+ipcMain.handle('dialog:openFile', async (evt) => {
+  const state = getState(evt);
+  const opts: Electron.OpenDialogOptions = {
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'Supported files',
+        extensions: [
+          'md', 'markdown', 'mdx',
+          'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp',
+          'pdf',
+        ],
+      },
+    ],
+  };
+  const result = state
+    ? await dialog.showOpenDialog(state.window, opts)
+    : await dialog.showOpenDialog(opts);
+  if (result.canceled || result.filePaths.length === 0) return null;
+  const filePath = result.filePaths[0];
+  const folder = path.dirname(filePath);
+  allowedRoots.add(folder);
+  if (!state) {
+    // No bound window (shouldn't happen from a menu click on a focused window,
+    // but guard anyway): open a new window positioned at that folder and let
+    // the renderer auto-select once loaded via pendingInitialFolder.
+    createWindow(folder);
+    return null;
+  }
+  state.openFolderRoot = folder;
+  const tree = await walkDir(folder);
+  void startWatching(state, folder);
+  return { root: folder, tree, filePath };
 });
 
 ipcMain.handle('dialog:openFolderInNewWindow', async (evt) => {

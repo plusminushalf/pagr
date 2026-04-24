@@ -18,6 +18,10 @@ export function fileKindFromName(name: string): FileKind {
 
 export type OpenFolderResult = { root: string; tree: FileNode[] } | null;
 
+export type OpenFileResult =
+  | { root: string; tree: FileNode[]; filePath: string }
+  | null;
+
 export type ContentMatch = {
   path: string;
   name: string;
@@ -33,6 +37,7 @@ export type TreeChangedEvent = { root: string; tree: FileNode[] };
 
 export interface PagrApi {
   openFolder(): Promise<OpenFolderResult>;
+  openFile(): Promise<OpenFileResult>;
   openFolderInNewWindow(): Promise<boolean>;
   takeInitialFolder(): Promise<OpenFolderResult>;
   listDir(folder: string): Promise<FileNode[]>;
@@ -42,6 +47,10 @@ export interface PagrApi {
   searchContent(query: string): Promise<ContentMatch[]>;
   onExternalChange(cb: (evt: ExternalChangeEvent) => void): () => void;
   onTreeChanged(cb: (evt: TreeChangedEvent) => void): () => void;
+  onMenuOpenFolder(cb: () => void): () => void;
+  onMenuOpenFile(cb: () => void): () => void;
+  onMenuToggleSidebar(cb: () => void): () => void;
+  onMenuShowShortcuts(cb: () => void): () => void;
 }
 
 declare global {

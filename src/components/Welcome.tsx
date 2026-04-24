@@ -16,9 +16,11 @@ export function Welcome({ onOpenFolder }: Props) {
       <div className="welcome-inner">
         <h1 className="welcome-title">pagr</h1>
         <p className="welcome-subtitle">
-          A quiet markdown editor for notes that live on your filesystem.
-          Edit <code>.md</code> files, flip through images, and read PDFs —
-          everything stays in plain files on disk, synced live as you type.
+          A tiny, opinionated markdown viewer and editor for folders that
+          Claude wrote. Edit <code>.md</code> files, flip through images,
+          and read PDFs — so you can review plans, workout routines,
+          company strategy, and anything else Claude put on disk without
+          squinting at a terminal.
         </p>
 
         <button
