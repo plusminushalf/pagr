@@ -1,6 +1,6 @@
 cask "pagr" do
-  version "0.0.9"
-  sha256 "c38cef2f98239088951a92766a6976060f59c31ec88d59f6a4140ec98eff4d20"
+  version "0.0.10"
+  sha256 "73eb23ecf9e1e40dd3f5586be17d7a239821e060700dfc62c4ee2772ea6efc66"
 
   url "https://github.com/plusminushalf/pagr/releases/download/v#{version}/pagr-#{version}-arm64.dmg"
   name "pagr"
