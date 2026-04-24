@@ -73,14 +73,16 @@ that teaches Claude to open folders in pagr for you — say "open this in
 pagr" or let Claude proactively offer after it writes a batch of
 markdown files.
 
-Clone this repo and symlink the skill into your Claude config:
+Drop the skill file into your Claude config — no repo clone needed:
 
 ```sh
-git clone https://github.com/plusminushalf/pagr.git
-ln -s "$(pwd)/pagr/skills/pagr" ~/.claude/skills/pagr
+mkdir -p ~/.claude/skills/pagr && \
+  curl -fsSL https://raw.githubusercontent.com/plusminushalf/pagr/main/skills/pagr/SKILL.md \
+    -o ~/.claude/skills/pagr/SKILL.md
 ```
 
-Restart Claude Code and the `/pagr` skill becomes available. See
+Re-run the same command later to pull in updates. Restart Claude Code
+and the `/pagr` skill becomes available. See
 [skills/pagr/SKILL.md](skills/pagr/SKILL.md) for the trigger phrases and
 behavior.
 
