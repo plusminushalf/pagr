@@ -142,6 +142,19 @@ jobs:
         #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run make -- --arch=arm64
 
+      - name: Build pagr.skill
+        # Packages skills/pagr/SKILL.md as a .skill file (just a zip with
+        # SKILL.md at the root) for Claude Cowork's Customize → Skills →
+        # Upload flow. Cowork's upload dialog accepts .zip and .skill
+        # interchangeably; we publish .skill so the filename tells the
+        # user what it is without them having to open it. The artifact is
+        # attached to the same GitHub release as the DMG.
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          (cd skills/pagr && zip -X ../../dist/pagr.skill SKILL.md)
+          unzip -l dist/pagr.skill
+
       - name: Generate release notes
         id: notes
         # Builds a release-body.md file with: (1) install instructions for
@@ -179,6 +192,16 @@ jobs:
           xattr -cr /Applications/pagr.app
           ```
 
+          ## Claude Cowork skill
+
+          `pagr.skill` attached below is for [Claude
+          Cowork](https://claude.com/). Download it, open Cowork's
+          **Customize** → **Skills** → **Upload skill** dialog, and drag
+          the file in. Teaches Claude to open folders in pagr. For
+          Claude Code (the local CLI), skip this — the skill installs
+          via `curl` instead; see the
+          [README](https://github.com/plusminushalf/pagr#claude-code-skill).
+
           ## Changelog
 
           BODY_EOF
@@ -210,6 +233,7 @@ jobs:
           name: ${{ steps.tag.outputs.tag }}
           files: |
             out/make/**/*.dmg
+            dist/pagr.skill
           body_path: release-body.md
           # Append to whatever body the user wrote when creating the release,
           # rather than overwriting it. Harmless on dispatch (no prior body).
