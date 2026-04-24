@@ -10,30 +10,6 @@ A tiny, opinionated markdown viewer and editor for folders that Claude wrote.
 
 ## Install
 
-### Let an AI agent do it (easiest)
-
-Paste the prompt below into [Claude Code](https://claude.com/claude-code)
-(or any AI agent with shell access). It installs the app via Homebrew
-and drops the companion Claude Code skill into place — no manual steps.
-
-```text
-Please install pagr on this Mac and set up the Claude Code skill.
-
-1. Install the app and `pagr` CLI via Homebrew:
-
-       brew tap plusminushalf/pagr https://github.com/plusminushalf/pagr
-       brew install --cask pagr
-
-2. Install the Claude Code skill so you can open folders in pagr for me
-   (single file, no repo clone needed):
-
-       mkdir -p ~/.claude/skills/pagr
-       curl -fsSL https://raw.githubusercontent.com/plusminushalf/pagr/main/skills/pagr/SKILL.md -o ~/.claude/skills/pagr/SKILL.md
-
-Verify /Applications/pagr.app and ~/.claude/skills/pagr/SKILL.md both
-exist. Then tell me to restart Claude Code so the /pagr skill activates.
-```
-
 ### Homebrew (macOS, Apple Silicon)
 
 ```sh
