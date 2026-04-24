@@ -10,6 +10,19 @@ A tiny, opinionated markdown viewer and editor for folders that Claude wrote.
 
 ## Install
 
+### Homebrew (macOS, Apple Silicon)
+
+```sh
+brew tap plusminushalf/pagr https://github.com/plusminushalf/pagr
+brew install --cask pagr
+```
+
+This installs pagr into `/Applications`, drops a `pagr` command onto
+your `PATH`, and strips the macOS quarantine flag so the unsigned build
+launches without the *"pagr is damaged"* dialog.
+
+### Manual download
+
 Builds aren't signed with an Apple Developer certificate yet, so the
 first-run involves one extra step. This is a three-command dance; you
 only need to do it once per install.
@@ -31,6 +44,27 @@ If you skip step 3, macOS will refuse to open the app with
 *"pagr is damaged and can't be opened"*. That's Gatekeeper rejecting an
 unsigned, quarantined app. The `xattr` command removes the download
 quarantine flag; after that, the app launches normally.
+
+## Command line
+
+Once installed, pagr ships a small `pagr` CLI. The Homebrew cask links
+it onto your `PATH` automatically; for a manual install, symlink the
+wrapper yourself:
+
+```sh
+ln -s /Applications/pagr.app/Contents/Resources/pagr /usr/local/bin/pagr
+```
+
+Then:
+
+```sh
+pagr            # open the app
+pagr ~/notes    # open ~/notes as a pagr folder in a new window
+pagr .          # open the current directory
+```
+
+If pagr is already running, the folder opens in a new window on the
+existing app rather than spawning a second Electron process.
 
 ## Why this exists
 

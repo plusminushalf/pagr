@@ -14,6 +14,11 @@ const config: ForgeConfig = {
     // picks assets/logo/icon.icns on macOS, .ico on Windows, .png on Linux.
     // Regenerate with `npm run build:icon` when mark.svg changes.
     icon: 'assets/logo/icon',
+    // Ships the CLI wrapper inside pagr.app/Contents/Resources/pagr. The
+    // Homebrew cask symlinks this onto the user's PATH; other installs can
+    // symlink it manually. Keeping the wrapper in the bundle means every
+    // copy of pagr.app carries its own matching CLI.
+    extraResource: ['bin/pagr'],
   },
   rebuildConfig: {},
   makers: [

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, net } from 'electron';
 import path from 'node:path';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import started from 'electron-squirrel-startup';
 
@@ -12,6 +12,37 @@ const getChokidar = () => (chokidarPromise ??= import('chokidar'));
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
+  app.quit();
+}
+
+// Holds a folder path delivered by macOS's `open-file` event before the app
+// is ready (e.g. when the user launches pagr by dropping a folder onto the
+// app icon). Consumed once `app.whenReady` resolves.
+let pendingOpenFileFolder: string | null = null;
+
+function pickFolderFromArgv(argv: string[]): string | null {
+  // In a packaged build argv[0] is the pagr binary; in dev it's the electron
+  // binary followed by '.' (the app path). Skip those and scan the rest for
+  // the first argument that resolves to a directory on disk.
+  const start = app.isPackaged ? 1 : 2;
+  for (let i = start; i < argv.length; i++) {
+    const arg = argv[i];
+    if (!arg || arg.startsWith('-')) continue;
+    try {
+      const resolved = path.resolve(arg);
+      if (statSync(resolved).isDirectory()) return resolved;
+    } catch {
+      // Not a readable path — keep scanning.
+    }
+  }
+  return null;
+}
+
+// Only allow one pagr process at a time so `pagr ~/notes` from the terminal
+// re-uses the running app (opening a new window) instead of spawning a second
+// Electron instance. Must run before `app.whenReady()` resolves.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
   app.quit();
 }
 
@@ -106,6 +137,42 @@ const createWindow = (initialFolder?: string) => {
   return mainWindow;
 };
 
+app.on('second-instance', (_event, argv) => {
+  const folder = pickFolderFromArgv(argv);
+  if (folder) {
+    allowedRoots.add(folder);
+    createWindow(folder);
+    return;
+  }
+  const wins = BrowserWindow.getAllWindows();
+  if (wins.length === 0) {
+    createWindow();
+    return;
+  }
+  const win = wins[0];
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
+// macOS fires `open-file` when the user opens a folder with pagr via Finder
+// (right-click → Open With → pagr) or drops a folder on the app icon.
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  let resolved: string;
+  try {
+    resolved = path.resolve(filePath);
+    if (!statSync(resolved).isDirectory()) return;
+  } catch {
+    return;
+  }
+  if (!app.isReady() || BrowserWindow.getAllWindows().length === 0) {
+    pendingOpenFileFolder = resolved;
+    return;
+  }
+  allowedRoots.add(resolved);
+  createWindow(resolved);
+});
+
 app.whenReady().then(() => {
   // Resolve `safe-file://` requests to an absolute file path, but only if the
   // requested path is inside one of the folders the user has opened.
@@ -138,7 +205,14 @@ app.whenReady().then(() => {
     }
   });
 
-  createWindow();
+  // Pick up a folder the user supplied via `pagr ~/notes` on the command line,
+  // or a folder delivered via `open-file` before the app was ready. If both
+  // fire, the `open-file` path wins — it's the one macOS just emitted.
+  const initialFolder =
+    pendingOpenFileFolder ?? pickFolderFromArgv(process.argv);
+  pendingOpenFileFolder = null;
+  if (initialFolder) allowedRoots.add(initialFolder);
+  createWindow(initialFolder ?? undefined);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

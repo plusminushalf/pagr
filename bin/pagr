@@ -1,0 +1,78 @@
+#!/bin/bash
+# pagr CLI wrapper.
+#
+# Shipped inside pagr.app/Contents/Resources/pagr and symlinked onto the
+# user's PATH (e.g. /opt/homebrew/bin/pagr) by the Homebrew cask.
+#
+# Usage:
+#   pagr              # just open the app
+#   pagr ~/notes      # open the app and load the given folder
+
+set -e
+
+# If the symlink's target tells us where pagr.app lives, prefer that.
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+  target=$(readlink "$self")
+  case "$target" in
+    /*) self="$target" ;;
+    *)  self="$(cd "$(dirname "$self")" && pwd)/$target" ;;
+  esac
+done
+resource_dir=$(cd "$(dirname "$self")" && pwd)
+
+APP=""
+# resource_dir is usually pagr.app/Contents/Resources; walk up to find the .app.
+candidate="${resource_dir%/Contents/Resources}"
+if [ -d "$candidate" ] && [ "${candidate%.app}" != "$candidate" ]; then
+  APP="$candidate"
+fi
+
+if [ -z "$APP" ]; then
+  for c in \
+    "/Applications/pagr.app" \
+    "$HOME/Applications/pagr.app"; do
+    if [ -d "$c" ]; then
+      APP="$c"
+      break
+    fi
+  done
+fi
+
+if [ -z "$APP" ]; then
+  echo "pagr: couldn't find pagr.app in /Applications or ~/Applications." >&2
+  echo "Install it from https://github.com/plusminushalf/pagr/releases" >&2
+  exit 1
+fi
+
+# Resolve positional path arguments to absolute paths so the app doesn't have
+# to guess what the caller's cwd was.
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -*)
+      args+=("$arg")
+      ;;
+    *)
+      if [ -e "$arg" ]; then
+        dir=$(cd "$(dirname "$arg")" 2>/dev/null && pwd || true)
+        if [ -n "$dir" ]; then
+          args+=("$dir/$(basename "$arg")")
+        else
+          args+=("$arg")
+        fi
+      else
+        args+=("$arg")
+      fi
+      ;;
+  esac
+done
+
+# `-n` forces a fresh launch; the single-instance lock inside pagr then
+# forwards the argv to the already-running window via `second-instance` and
+# exits, so the user still ends up with one app process.
+if [ ${#args[@]} -gt 0 ]; then
+  exec open -na "$APP" --args "${args[@]}"
+else
+  exec open -a "$APP"
+fi
