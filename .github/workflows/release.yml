@@ -216,3 +216,60 @@ jobs:
           append_body: true
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
           make_latest: ${{ steps.tag.outputs.prerelease == 'true' && 'false' || 'true' }}
+
+      - name: Bump Homebrew cask
+        # Rewrites `version` and `sha256` in Casks/pagr.rb to match the DMG
+        # we just published and pushes the change to the default branch.
+        # Without this, `brew install --cask pagr` stays pinned to the
+        # previous release until someone bumps the cask by hand.
+        #
+        # Skips cleanly if the cask file isn't present (e.g. stripped out of
+        # a future fork) or if the values already match (re-running the
+        # workflow on the same tag).
+        if: steps.tag.outputs.prerelease != 'true'
+        run: |
+          set -euo pipefail
+          DMG=$(ls out/make/*.dmg 2>/dev/null | head -1 || true)
+          if [ -z "$DMG" ] || [ ! -f "$DMG" ]; then
+            echo "No DMG found in out/make — skipping cask bump."
+            exit 0
+          fi
+          if [ ! -f Casks/pagr.rb ]; then
+            echo "Casks/pagr.rb not present — skipping cask bump."
+            exit 0
+          fi
+
+          SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+          VERSION="${{ steps.tag.outputs.version }}"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # The release-published path checks out the tag's commit, which may
+          # trail the default branch; the dispatch path already sits on the
+          # default branch with the version-bump commit pushed. Either way,
+          # fetch + switch so we commit on top of the latest tip.
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+          git pull --ff-only origin "$DEFAULT_BRANCH"
+
+          python3 - "$VERSION" "$SHA" <<'PY'
+          import pathlib, re, sys
+
+          version, sha = sys.argv[1], sys.argv[2]
+          path = pathlib.Path("Casks/pagr.rb")
+          text = path.read_text()
+          text = re.sub(r'version\s+"[^"]+"', f'version "{version}"', text, count=1)
+          text = re.sub(r'sha256\s+(?::no_check|"[^"]*")', f'sha256 "{sha}"', text, count=1)
+          path.write_text(text)
+          PY
+
+          if git diff --quiet Casks/pagr.rb; then
+            echo "Cask already up to date for v$VERSION."
+            exit 0
+          fi
+
+          git add Casks/pagr.rb
+          git commit -m "chore: bump Homebrew cask to v$VERSION"
+          git push origin "$DEFAULT_BRANCH"
