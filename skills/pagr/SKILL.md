@@ -64,22 +64,3 @@ Check availability with `command -v pagr` before running. If missing:
 
 Don't try to install pagr automatically — surface the commands and let the
 user run them.
-
-## If you're in a sandboxed environment (Claude Cowork etc.)
-
-pagr is a native macOS app. If your shell is a Linux sandbox (the classic
-giveaway: your `~/` is `/root/`, `uname` reports Linux, or `command -v pagr`
-fails even though the user insists pagr is installed), you **cannot** launch
-pagr from here — the app lives on the user's Mac, not inside your sandbox.
-
-In that case:
-
-1. Don't try `brew install`, `curl`, or `~/.claude/...` writes. They'll write
-   into the sandbox and silently not reach the user's Mac.
-2. Tell the user plainly: "I can't open pagr from this sandboxed session. On
-   your Mac, run: `pagr /path/to/folder`." If the folder only exists inside
-   the sandbox, offer to help sync the files to their Mac first.
-3. If the user is trying to install the skill itself, point them at the
-   plugin path: `/plugin marketplace add plusminushalf/pagr` then
-   `/plugin install pagr@plusminushalf`. That works in any Claude client
-   because it bypasses the shell.

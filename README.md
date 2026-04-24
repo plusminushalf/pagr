@@ -12,36 +12,26 @@ A tiny, opinionated markdown viewer and editor for folders that Claude wrote.
 
 ### Let an AI agent do it (easiest)
 
-Paste the prompt below into any Claude client — [Claude
-Code](https://claude.com/claude-code), Claude Cowork, Claude Desktop. It
-installs the Mac app via Homebrew and wires up the companion skill,
-picking the right path for whichever environment it's running in.
+Paste the prompt below into [Claude Code](https://claude.com/claude-code)
+(or any AI agent with shell access). It installs the app via Homebrew
+and drops the companion Claude Code skill into place — no manual steps.
 
 ```text
-Please install pagr on this Mac and set up the Claude skill.
+Please install pagr on this Mac and set up the Claude Code skill.
 
-1. Install the app and `pagr` CLI. This step needs a local Mac terminal —
-   if you're in a sandboxed session (Claude Cowork etc.), tell me to paste
-   this block into Terminal on my Mac myself:
+1. Install the app and `pagr` CLI via Homebrew:
 
        brew tap plusminushalf/pagr https://github.com/plusminushalf/pagr
        brew install --cask pagr
 
-2. Install the Claude skill. Pick the path that matches where you are:
+2. Install the Claude Code skill so you can open folders in pagr for me
+   (single file, no repo clone needed):
 
-   - Claude Code (local CLI on my Mac):
+       mkdir -p ~/.claude/skills/pagr
+       curl -fsSL https://raw.githubusercontent.com/plusminushalf/pagr/main/skills/pagr/SKILL.md -o ~/.claude/skills/pagr/SKILL.md
 
-         mkdir -p ~/.claude/skills/pagr
-         curl -fsSL https://raw.githubusercontent.com/plusminushalf/pagr/main/skills/pagr/SKILL.md -o ~/.claude/skills/pagr/SKILL.md
-
-   - Claude Cowork, Claude Desktop, or any other Claude client — install
-     as a plugin (works everywhere, not a shell command):
-
-         /plugin marketplace add plusminushalf/pagr
-         /plugin install pagr@plusminushalf
-
-Verify /Applications/pagr.app exists. Then tell me to restart Claude so
-the /pagr skill activates.
+Verify /Applications/pagr.app and ~/.claude/skills/pagr/SKILL.md both
+exist. Then tell me to restart Claude Code so the /pagr skill activates.
 ```
 
 ### Homebrew (macOS, Apple Silicon)
@@ -100,17 +90,12 @@ pagr .          # open the current directory
 If pagr is already running, the folder opens in a new window on the
 existing app rather than spawning a second Electron process.
 
-## Claude skill
+## Claude Code skill
 
-There's a skill that teaches Claude to open folders in pagr for you —
-say "open this in pagr", or let Claude proactively offer after it writes
-a batch of markdown files. Works in
-[Claude Code](https://claude.com/claude-code), Claude Cowork, Claude
-Desktop, and anywhere else skills or plugins are supported.
-
-Two install paths, depending on where you're using Claude.
-
-### Claude Code (local CLI on your Mac)
+If you use [Claude Code](https://claude.com/claude-code), there's a skill
+that teaches Claude to open folders in pagr for you — say "open this in
+pagr" or let Claude proactively offer after it writes a batch of
+markdown files.
 
 Drop the skill file into your Claude config — no repo clone needed:
 
@@ -121,32 +106,9 @@ mkdir -p ~/.claude/skills/pagr && \
 ```
 
 Re-run the same command later to pull in updates. Restart Claude Code
-and the `/pagr` skill becomes available.
-
-### Claude Cowork (and anywhere else)
-
-Cowork runs in an isolated Linux sandbox, so it can't write to your
-Mac's `~/.claude/skills/` — a `curl` in Cowork lands in the sandbox's
-filesystem and your Mac never sees it. Use the plugin install instead.
-It's a Claude slash command, not a shell command, so it reaches your
-real Claude config on whatever machine you're signed into:
-
-```text
-/plugin marketplace add plusminushalf/pagr
-/plugin install pagr@plusminushalf
-```
-
-Restart Claude (or start a new session) and the `/pagr` skill becomes
-available.
-
-See [skills/pagr/SKILL.md](skills/pagr/SKILL.md) for the trigger phrases
-and behavior.
-
-> **Heads up:** pagr itself is a macOS app. Installing the skill in
-> Cowork lets Claude *talk about* pagr and emit the right commands, but
-> Cowork still can't launch pagr from its sandbox — you'll run
-> `pagr /path/to/folder` yourself on your Mac. Native "click to open in
-> pagr" from Cowork is planned (via a `pagr://` URL scheme).
+and the `/pagr` skill becomes available. See
+[skills/pagr/SKILL.md](skills/pagr/SKILL.md) for the trigger phrases and
+behavior.
 
 ## Why this exists
 
