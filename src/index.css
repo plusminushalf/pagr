@@ -184,6 +184,7 @@ body {
   align-items: flex-start;
   padding-top: 14vh;
   z-index: 1000;
+  -webkit-app-region: no-drag;
 }
 
 .settings-panel {
@@ -681,6 +682,7 @@ body {
   align-items: flex-start;
   padding-top: 14vh;
   z-index: 1000;
+  -webkit-app-region: no-drag;
 }
 
 .shortcuts-panel {
