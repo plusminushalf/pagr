@@ -82,12 +82,13 @@ const createWindow = (initialFolder?: string) => {
     treeRefreshTimer: null,
     pendingInitialFolder: initialFolder ?? null,
   };
-  windowStates.set(mainWindow.webContents.id, state);
+  const webContentsId = mainWindow.webContents.id;
+  windowStates.set(webContentsId, state);
 
   mainWindow.on('closed', () => {
     if (state.watcher) void state.watcher.close().catch(() => undefined);
     if (state.treeRefreshTimer) clearTimeout(state.treeRefreshTimer);
-    windowStates.delete(mainWindow.webContents.id);
+    windowStates.delete(webContentsId);
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
