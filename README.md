@@ -66,6 +66,24 @@ pagr .          # open the current directory
 If pagr is already running, the folder opens in a new window on the
 existing app rather than spawning a second Electron process.
 
+## Claude Code skill
+
+If you use [Claude Code](https://claude.com/claude-code), there's a skill
+that teaches Claude to open folders in pagr for you — say "open this in
+pagr" or let Claude proactively offer after it writes a batch of
+markdown files.
+
+Clone this repo and symlink the skill into your Claude config:
+
+```sh
+git clone https://github.com/plusminushalf/pagr.git
+ln -s "$(pwd)/pagr/skills/pagr" ~/.claude/skills/pagr
+```
+
+Restart Claude Code and the `/pagr` skill becomes available. See
+[skills/pagr/SKILL.md](skills/pagr/SKILL.md) for the trigger phrases and
+behavior.
+
 ## Why this exists
 
 Two things Claude Cowork is genuinely good at:
