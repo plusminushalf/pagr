@@ -49,6 +49,7 @@ export interface PagrApi {
   onTreeChanged(cb: (evt: TreeChangedEvent) => void): () => void;
   onMenuOpenFolder(cb: () => void): () => void;
   onMenuOpenFile(cb: () => void): () => void;
+  onMenuOpenSettings(cb: () => void): () => void;
   onMenuToggleSidebar(cb: () => void): () => void;
   onMenuShowShortcuts(cb: () => void): () => void;
 }

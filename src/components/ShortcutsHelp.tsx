@@ -8,6 +8,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ['⌘', 'K'], label: 'Command palette' },
   { keys: ['⌘', 'S'], label: 'Save' },
   { keys: ['⌘', 'B'], label: 'Toggle sidebar' },
+  { keys: ['⌘', ','], label: 'Settings' },
   { keys: ['⌘', '?'], label: 'Show this help' },
   { keys: ['Esc'], label: 'Close dialog / palette' },
 ];

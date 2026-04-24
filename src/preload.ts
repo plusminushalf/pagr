@@ -41,6 +41,7 @@ const api = {
     ipcRenderer.invoke('dialog:openFolderInNewWindow'),
   onMenuOpenFolder: (cb: () => void) => onMenu('menu:openFolder', cb),
   onMenuOpenFile: (cb: () => void) => onMenu('menu:openFile', cb),
+  onMenuOpenSettings: (cb: () => void) => onMenu('menu:openSettings', cb),
   onMenuToggleSidebar: (cb: () => void) => onMenu('menu:toggleSidebar', cb),
   onMenuShowShortcuts: (cb: () => void) => onMenu('menu:showShortcuts', cb),
   takeInitialFolder: (): Promise<OpenFolderResult> =>

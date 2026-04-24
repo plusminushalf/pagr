@@ -175,20 +175,35 @@ body {
   line-height: 1;
 }
 
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 19, 22, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+  z-index: 1000;
+}
+
 .settings-panel {
-  position: absolute;
-  bottom: calc(100% - 4px);
-  left: 8px;
-  right: 8px;
+  width: min(420px, 90vw);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
-  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 20;
+  gap: 12px;
+}
+
+.settings-header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
 }
 
 .settings-row {

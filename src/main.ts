@@ -193,6 +193,12 @@ function buildAppMenu(): Menu {
             submenu: [
               { role: 'about' as const },
               { type: 'separator' as const },
+              {
+                label: 'Settings…',
+                accelerator: 'Cmd+,',
+                click: () => sendToFocused('menu:openSettings'),
+              },
+              { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
               { role: 'hide' as const },
@@ -217,8 +223,18 @@ function buildAppMenu(): Menu {
           accelerator: 'CmdOrCtrl+Shift+O',
           click: () => sendToFocused('menu:openFile'),
         },
-        { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' },
+        ...(isMac
+          ? []
+          : [
+              { type: 'separator' as const },
+              {
+                label: 'Settings…',
+                accelerator: 'Ctrl+,',
+                click: () => sendToFocused('menu:openSettings'),
+              },
+            ]),
+        { type: 'separator' as const },
+        isMac ? { role: 'close' as const } : { role: 'quit' as const },
       ],
     },
     { role: 'editMenu' },

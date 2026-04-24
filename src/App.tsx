@@ -236,6 +236,9 @@ export function App() {
       } else if ((e.metaKey || e.ctrlKey) && e.key === '?') {
         e.preventDefault();
         setHelpOpen((v) => !v);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen((v) => !v);
       } else if (
         (e.metaKey || e.ctrlKey) &&
         !e.shiftKey &&
@@ -270,6 +273,9 @@ export function App() {
       }),
       window.pagr.onMenuShowShortcuts(() => {
         setHelpOpen((v) => !v);
+      }),
+      window.pagr.onMenuOpenSettings(() => {
+        setSettingsOpen((v) => !v);
       }),
     ];
     return () => {
@@ -320,15 +326,6 @@ export function App() {
             <span className="sidebar-footer-icon">⚙</span>
             Settings
           </button>
-          {settingsOpen && (
-            <SettingsPanel
-              font={font}
-              theme={theme}
-              onFontChange={setFont}
-              onThemeChange={setTheme}
-              onClose={() => setSettingsOpen(false)}
-            />
-          )}
         </div>
       </aside>
       <div
@@ -401,6 +398,15 @@ export function App() {
         />
       )}
       {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && (
+        <SettingsPanel
+          font={font}
+          theme={theme}
+          onFontChange={setFont}
+          onThemeChange={setTheme}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 }
