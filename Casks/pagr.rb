@@ -1,9 +1,6 @@
 cask "pagr" do
-  version "0.0.5"
-  # Builds aren't notarized, and every macos release changes the DMG hash.
-  # Using :no_check here matches reality — swap to a pinned hash once we
-  # start signing releases.
-  sha256 :no_check
+  version "0.0.7"
+  sha256 "1718f953ed51851df285e0d5397b1d4c8fde9b9115421279bbeaa608b53b901e"
 
   url "https://github.com/plusminushalf/pagr/releases/download/v#{version}/pagr-#{version}-arm64.dmg"
   name "pagr"
